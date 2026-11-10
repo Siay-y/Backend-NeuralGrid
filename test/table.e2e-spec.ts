@@ -18,6 +18,16 @@ interface Snapshot {
   tokens: Array<{ id: string }>;
   members: Array<Record<string, unknown>>;
   online: string[];
+  messages: MessageData[];
+}
+
+interface MessageData {
+  id: string;
+  text: string | null;
+  roll: {
+    total: number;
+    terms: Array<{ rolls?: Array<{ value: number; kept: boolean }> }>;
+  } | null;
 }
 
 interface Ack<T> {
@@ -213,6 +223,127 @@ describe('Table gateway (e2e)', () => {
       (await send(master.socket, 'token:delete', { id: tokenId })).ok,
     ).toBe(true);
     expect(await otherSeesDeletion).toEqual({ id: tokenId });
+  });
+
+  it('delivers chat and rolls only to who may see them', async () => {
+    const master = await open(sessions.mestre.token);
+    const player = await open(sessions.jogador1.token);
+    const other = await open(sessions.jogador2.token);
+
+    const inbox = new Map<Socket, MessageData[]>();
+    for (const { socket } of [master, player, other]) {
+      inbox.set(socket, []);
+      socket.on('chat:message', (message: MessageData) =>
+        inbox.get(socket)!.push(message),
+      );
+    }
+
+    const hidden = await send<MessageData>(master.socket, 'dice:roll', {
+      expression: '1d20+2',
+      label: 'Percepção da ameaça',
+      visibility: 'gm',
+    });
+    expect(hidden.ok).toBe(true);
+    expect(hidden.data!.roll!.total).toBeGreaterThanOrEqual(3);
+    expect(hidden.data!.roll!.total).toBeLessThanOrEqual(22);
+
+    const whisper = await send<MessageData>(player.socket, 'chat:send', {
+      text: 'tenho um plano',
+      visibility: 'whisper',
+      recipientId: sessions.jogador2.userId,
+    });
+    expect(whisper.ok).toBe(true);
+
+    const test = await send<MessageData>(other.socket, 'dice:roll', {
+      expression: '3d20kh1+5',
+      label: 'Ocultismo',
+      visibility: 'public',
+    });
+    const d20 = test.data!.roll!.terms[0];
+    expect(d20.rolls).toHaveLength(3);
+    expect(d20.rolls!.filter((die) => die.kept)).toHaveLength(1);
+
+    const last = 'fim da cena';
+    const everyoneGotLast = [master, player, other].map(({ socket }) =>
+      until<MessageData>(socket, 'chat:message', (m) => m.text === last),
+    );
+    await send(master.socket, 'chat:send', {
+      text: last,
+      visibility: 'public',
+    });
+    await Promise.all(everyoneGotLast);
+
+    const ids = (socket: Socket) => inbox.get(socket)!.map((m) => m.id);
+    const lastId = inbox.get(master.socket)!.at(-1)!.id;
+    expect(ids(master.socket)).toEqual([
+      hidden.data!.id,
+      test.data!.id,
+      lastId,
+    ]);
+    expect(ids(player.socket)).toEqual([
+      whisper.data!.id,
+      test.data!.id,
+      lastId,
+    ]);
+    expect(ids(other.socket)).toEqual([
+      whisper.data!.id,
+      test.data!.id,
+      lastId,
+    ]);
+
+    const rejoined = await open(sessions.jogador1.token);
+    expect(rejoined.snapshot.messages.map((m) => m.id)).toEqual([
+      whisper.data!.id,
+      test.data!.id,
+      lastId,
+    ]);
+  });
+
+  it('refuses invalid dice and whispers', async () => {
+    const { socket } = await open(sessions.jogador1.token);
+
+    const tooManyFaces = await send(socket, 'dice:roll', {
+      expression: '1d1000',
+      visibility: 'public',
+    });
+    const noRecipient = await send(socket, 'chat:send', {
+      text: 'oi',
+      visibility: 'whisper',
+    });
+    const toSelf = await send(socket, 'chat:send', {
+      text: 'oi',
+      visibility: 'whisper',
+      recipientId: sessions.jogador1.userId,
+    });
+
+    expect(tooManyFaces.error?.code).toBe('INVALID_DICE');
+    expect(noRecipient.error?.code).toBe('INVALID_PAYLOAD');
+    expect(toSelf.error?.code).toBe('INVALID_MESSAGE');
+  });
+
+  it('lets only the master clear the chat for everyone', async () => {
+    const master = await open(sessions.mestre.token);
+    const player = await open(sessions.jogador1.token);
+    await send(player.socket, 'chat:send', {
+      text: 'mensagem antiga',
+      visibility: 'public',
+    });
+
+    const refused = await send(player.socket, 'chat:clear', {});
+    expect(refused.error?.code).toBe('CHAT_FORBIDDEN');
+
+    const playerSeesClear = next<{ by: string }>(player.socket, 'chat:cleared');
+    const cleared = await send<{ removed: number }>(
+      master.socket,
+      'chat:clear',
+      {},
+    );
+    expect(cleared.ok).toBe(true);
+    expect(cleared.data!.removed).toBeGreaterThan(0);
+    expect((await playerSeesClear).by).toBe(sessions.mestre.userId);
+
+    const rejoined = await open(sessions.jogador1.token);
+    expect(rejoined.snapshot.messages).toEqual([]);
   });
 
   it('rejects malformed and unexpected payloads', async () => {

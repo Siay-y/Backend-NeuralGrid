@@ -48,6 +48,8 @@ O cliente Angular vive em
 | Autorização | Guard global fail-closed, `@Public()` explícito e `@Roles('master', 'player')` |
 | Tempo real | Socket.io no namespace `/table`, autenticado no handshake pelo mesmo JWT |
 | Tokens | Agentes, NPCs e ameaças com posse, versão e permissões checadas no servidor |
+| Dados | Gramática própria sem `eval`, sorteio com `crypto.randomInt` e resultado gravado |
+| Chat | Histórico no PostgreSQL, rolagem oculta e sussurros entregues só a quem pode ver |
 | Validação | DTOs com `class-validator`, campos desconhecidos rejeitados com `400` |
 | Erros | Filtro global com corpo único `{ statusCode, error, message }` |
 | Banco | PostgreSQL com migrations versionadas, regras repetidas em `CHECK` |
@@ -78,6 +80,13 @@ O cliente Angular vive em
   `{ ok, error }`. Nenhuma regra mora só no cliente.
 - **Presença e sessão.** A mesa sabe quem está conectado, e o socket cai sozinho
   quando o JWT expira.
+- **Dados que ninguém forja.** O cliente manda só a expressão, como `3d20kh1+5`;
+  o servidor sorteia com gerador criptográfico e grava cada dado. O teste de
+  Ordem Paranormal, um d20 por ponto de atributo ficando o maior, é só uma
+  expressão dessa gramática.
+- **Privado é privado.** Rolagem oculta do mestre, rolagem só para o mestre e
+  sussurros saem apenas para as salas de quem pode ler, e o histórico é
+  filtrado no SQL.
 
 ---
 
@@ -105,6 +114,7 @@ src/
 └── modules/
     ├── users/                    identidade, credenciais e hash de senha
     ├── auth/                     login, emissão e verificação de JWT, guards
+    ├── chat/                     mensagens, gramática de dados e sorteio
     └── tabletop/                 tokens, permissões, presença e gateway /table
 ```
 
@@ -253,7 +263,7 @@ provedor está em [docs/deploy.md](docs/deploy.md).
 
 - [Arquitetura](docs/arquitetura.md): camadas, regra de dependência e como criar um módulo.
 - [Autenticação e segurança](docs/autenticacao.md): fluxo de login, JWT, throttling e guards em HTTP e WebSocket.
-- [Tempo real](docs/tempo-real.md): protocolo do namespace `/table`, permissões, presença e limites.
+- [Tempo real](docs/tempo-real.md): protocolo do namespace `/table`, permissões, chat, dados, presença e limites.
 - [Deploy](docs/deploy.md): Render, Neon, Supabase e rotação de segredos.
 - [Changelog](CHANGELOG.md): o que mudou em cada versão da API.
 

@@ -12,6 +12,14 @@ import {
 import type { DefaultEventsMap, Namespace, Socket } from 'socket.io';
 import { DomainError } from '../../../../shared/domain/errors/domain-error';
 import type { AuthenticatedUser } from '../../../auth/application/dtos/auth-session';
+import type { MessageView } from '../../../chat/application/dtos/message-view';
+import {
+  type ChatCleared,
+  ClearChatUseCase,
+} from '../../../chat/application/use-cases/clear-chat.use-case';
+import { ListRecentMessagesUseCase } from '../../../chat/application/use-cases/list-recent-messages.use-case';
+import { RollDiceUseCase } from '../../../chat/application/use-cases/roll-dice.use-case';
+import { SendMessageUseCase } from '../../../chat/application/use-cases/send-message.use-case';
 import { AuthenticateAccessTokenUseCase } from '../../../auth/application/use-cases/authenticate-access-token.use-case';
 import { ListUsersUseCase } from '../../../users/application/use-cases/list-users.use-case';
 import type { TokenView } from '../../application/dtos/token-view';
@@ -22,6 +30,7 @@ import { ListTokensUseCase } from '../../application/use-cases/list-tokens.use-c
 import { MoveTokenUseCase } from '../../application/use-cases/move-token.use-case';
 import { UpdateTokenUseCase } from '../../application/use-cases/update-token.use-case';
 import type { TableActor } from '../../domain/policies/token-policy';
+import { RollDiceDto, SendMessageDto } from './dtos/chat.dtos';
 import {
   CreateTokenDto,
   TokenIdDto,
@@ -32,9 +41,11 @@ import { PresenceTracker } from './presence-tracker';
 import { SocketRateLimiter } from './socket-rate-limiter';
 import {
   HANDSHAKE_UNAUTHORIZED,
+  MASTERS_ROOM,
   TABLE_NAMESPACE,
   TableClientEvent,
   TableServerEvent,
+  userRoom,
 } from './table.events';
 import { parsePayload, RateLimitedError, type WsResult } from './ws-payload';
 
@@ -73,6 +84,10 @@ export class TableGateway
     private readonly moveToken: MoveTokenUseCase,
     private readonly authorizeDrag: AuthorizeTokenDragUseCase,
     private readonly deleteToken: DeleteTokenUseCase,
+    private readonly listMessages: ListRecentMessagesUseCase,
+    private readonly sendMessage: SendMessageUseCase,
+    private readonly rollDice: RollDiceUseCase,
+    private readonly clearChat: ClearChatUseCase,
   ) {}
 
   afterInit(namespace: Namespace): void {
@@ -101,11 +116,17 @@ export class TableGateway
     );
 
     const cameOnline = this.presence.join(user.id, socket.id);
+    void socket.join(
+      user.role === 'master'
+        ? [userRoom(user.id), MASTERS_ROOM]
+        : [userRoom(user.id)],
+    );
 
     try {
-      const [tokens, users] = await Promise.all([
+      const [tokens, users, messages] = await Promise.all([
         this.listTokens.execute(),
         this.listUsers.execute(),
+        this.listMessages.execute({ id: user.id, role: user.role }),
       ]);
       socket.emit(TableServerEvent.Snapshot, {
         you: user,
@@ -116,6 +137,7 @@ export class TableGateway
           role,
         })),
         online: this.presence.onlineUserIds(),
+        messages,
       });
     } catch (error) {
       this.logger.error(error instanceof Error ? error.stack : String(error));
@@ -210,6 +232,66 @@ export class TableGateway
       this.server.emit(TableServerEvent.TokenDeleted, result);
       return result;
     });
+  }
+
+  @SubscribeMessage(TableClientEvent.SendMessage)
+  send(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<MessageView>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(SendMessageDto, body);
+      const message = await this.sendMessage.execute(actor, {
+        text: dto.text,
+        visibility: dto.visibility,
+        recipientId: dto.recipientId ?? null,
+      });
+      this.deliver(message);
+      return message;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.RollDice)
+  roll(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<MessageView>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(RollDiceDto, body);
+      const message = await this.rollDice.execute(actor, {
+        expression: dto.expression,
+        label: dto.label ?? null,
+        visibility: dto.visibility,
+        recipientId: dto.recipientId ?? null,
+      });
+      this.deliver(message);
+      return message;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.ClearChat)
+  clear(
+    @ConnectedSocket() socket: TableSocket,
+  ): Promise<WsResult<ChatCleared>> {
+    return this.run(socket, async (actor) => {
+      const cleared = await this.clearChat.execute(actor);
+      this.server.emit(TableServerEvent.ChatCleared, cleared);
+      return cleared;
+    });
+  }
+
+  private deliver(message: MessageView): void {
+    if (message.visibility === 'public') {
+      this.server.emit(TableServerEvent.MessageCreated, message);
+      return;
+    }
+    const rooms = [message.authorId, message.recipientId]
+      .filter((id): id is string => id !== null)
+      .map(userRoom);
+    if (message.visibility === 'gm') {
+      rooms.push(MASTERS_ROOM);
+    }
+    this.server.to(rooms).emit(TableServerEvent.MessageCreated, message);
   }
 
   private async run<T>(

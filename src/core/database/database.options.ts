@@ -1,9 +1,11 @@
 import type { DataSourceOptions } from 'typeorm';
+import { ChatMessageOrmEntity } from '../../modules/chat/infrastructure/persistence/typeorm/entities/chat-message.orm-entity';
 import { TokenOrmEntity } from '../../modules/tabletop/infrastructure/persistence/typeorm/entities/token.orm-entity';
 import { UserOrmEntity } from '../../modules/users/infrastructure/persistence/typeorm/entities/user.orm-entity';
 import { DatabaseSslMode } from './database-ssl-mode';
 import { CreateUsers1762790400000 } from './migrations/1762790400000-create-users';
 import { CreateTokens1763337600000 } from './migrations/1763337600000-create-tokens';
+import { CreateChatMessages1763942400000 } from './migrations/1763942400000-create-chat-messages';
 
 export interface DatabaseSettings {
   url: string;
@@ -32,8 +34,12 @@ export function buildDataSourceOptions(
     type: 'postgres',
     url: withoutSslParameters(settings.url),
     ssl: SSL_BY_MODE[settings.sslMode],
-    entities: [UserOrmEntity, TokenOrmEntity],
-    migrations: [CreateUsers1762790400000, CreateTokens1763337600000],
+    entities: [UserOrmEntity, TokenOrmEntity, ChatMessageOrmEntity],
+    migrations: [
+      CreateUsers1762790400000,
+      CreateTokens1763337600000,
+      CreateChatMessages1763942400000,
+    ],
     migrationsTableName: 'typeorm_migrations',
     uuidExtension: 'pgcrypto',
     installExtensions: false,

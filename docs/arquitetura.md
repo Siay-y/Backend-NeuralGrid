@@ -71,6 +71,25 @@ backend-neural-grid/
         │   │   └── request-user.ts    lê o usuário em contexto http ou ws
         │   └── auth.module.ts
         │
+        ├── chat/
+        │   ├── domain/
+        │   │   ├── dice/              gramática de dados e rolagem, sem I/O
+        │   │   ├── entities/          ChatMessage
+        │   │   ├── value-objects/     MessageVisibility
+        │   │   ├── policies/          MessagePolicy: quem vê cada mensagem
+        │   │   ├── errors/
+        │   │   └── repositories/      ChatMessageRepository (porta)
+        │   ├── application/
+        │   │   ├── ports/             RandomSource
+        │   │   ├── dtos/              MessageView
+        │   │   ├── services/          MessageAudienceValidator
+        │   │   └── use-cases/         SendMessage, RollDice, ListRecentMessages
+        │   ├── infrastructure/
+        │   │   ├── random/            CryptoRandomSource
+        │   │   └── persistence/typeorm/
+        │   ├── testing/               repositório em memória e sorteio roteirizado
+        │   └── chat.module.ts
+        │
         └── tabletop/
             ├── domain/
             │   ├── entities/          Token
@@ -85,8 +104,8 @@ backend-neural-grid/
             │                          AuthorizeTokenDrag, DeleteToken
             ├── infrastructure/persistence/typeorm/
             ├── presentation/ws/
-            │   ├── table.gateway.ts   handshake, snapshot, eventos e broadcast
-            │   ├── dtos/              DTOs dos eventos com class-validator
+            │   ├── table.gateway.ts   handshake, snapshot, salas, eventos e broadcast
+            │   ├── dtos/              DTOs dos eventos de tokens, chat e dados
             │   ├── presence-tracker.ts
             │   ├── socket-rate-limiter.ts
             │   └── ws-payload.ts      validação de payload e formato do ack
@@ -138,6 +157,11 @@ exports: [VerifyCredentialsUseCase, GetUserByIdUseCase, ProvisionUserUseCase],
 Assim `auth` pergunta "estas credenciais são válidas?" sem saber que existe uma
 tabela `users`, e o hash da senha nunca sai do módulo: os casos de uso devolvem
 `UserView`, que não tem esse campo.
+
+O mesmo vale para `chat`: ele exporta `SendMessage`, `RollDice` e
+`ListRecentMessages`, e o `TableGateway` de `tabletop` os chama. Existe um único
+gateway no namespace `/table`, com um único handshake, e cada módulo cuida só
+das próprias regras.
 
 ## Guards e filtro globais
 
@@ -193,7 +217,9 @@ Rotas novas já nascem exigindo token. Para restringir ao mestre, basta
 ## Testes
 
 - **Unitários** (`src/**/*.spec.ts`): entidades, políticas e casos de uso com os
-  dublês em memória de `modules/*/testing`, sem banco e sem NestJS.
+  dublês em memória de `modules/*/testing`, sem banco e sem NestJS. A rolagem
+  recebe o sorteio por parâmetro, então os testes de dados usam valores
+  roteirizados e conferem o resultado exato.
 - **E2E** (`test/*.e2e-spec.ts`): sobem o `AppModule` inteiro contra o banco
   `neuralgrid_test`. `auth.e2e-spec.ts` percorre o pipeline HTTP, incluindo
   throttling e token adulterado; `table.e2e-spec.ts` conecta clientes Socket.io
