@@ -255,6 +255,7 @@ provedor está em [docs/deploy.md](docs/deploy.md).
 - [Autenticação e segurança](docs/autenticacao.md): fluxo de login, JWT, throttling e guards em HTTP e WebSocket.
 - [Tempo real](docs/tempo-real.md): protocolo do namespace `/table`, permissões, presença e limites.
 - [Deploy](docs/deploy.md): Render, Neon, Supabase e rotação de segredos.
+- [Changelog](CHANGELOG.md): o que mudou em cada versão da API.
 
 ---
 
