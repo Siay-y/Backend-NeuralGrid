@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
+import { ChatModule } from '../chat/chat.module';
 import { UsersModule } from '../users/users.module';
 import { TokenOwnerValidator } from './application/services/token-owner-validator';
 import { AuthorizeTokenDragUseCase } from './application/use-cases/authorize-token-drag.use-case';
@@ -20,6 +21,7 @@ import { TableGateway } from './presentation/ws/table.gateway';
     TypeOrmModule.forFeature([TokenOrmEntity]),
     UsersModule,
     AuthModule,
+    ChatModule,
   ],
   providers: [
     { provide: TokenRepository, useClass: TypeOrmTokenRepository },

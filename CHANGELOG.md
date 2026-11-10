@@ -6,6 +6,24 @@ do roadmap e o patch a cada melhoria ou correção. As notas para os jogadores
 ficam na aba Atualizações do
 [frontend](https://github.com/Siay-y/Frontend-NeuralGrid).
 
+## 0.3.0 (2026-11-10)
+
+Dados e chat.
+
+### Novo
+
+- Módulo `chat`, com mensagens e rolagens gravadas na tabela `chat_messages`.
+- Gramática de dados própria: `NdF`, `khK`, `klK` e modificadores, com limites
+  de tamanho, faces e quantidade.
+- Sorteio no servidor com `crypto.randomInt`; o cliente envia só a expressão.
+- Eventos `chat:send`, `dice:roll` e `chat:message`, e as últimas 100 mensagens
+  visíveis no snapshot.
+- Visibilidade `public`, `gm` (rolagem oculta ou só para o mestre) e `whisper`.
+  Mensagens privadas vão só para as salas de quem pode lê-las.
+- Evento `chat:clear`, só para o mestre, que apaga o histórico e avisa a mesa
+  com `chat:cleared`.
+- Migration `CreateChatMessages`, aplicada sozinha no boot.
+
 ## 0.2.0 (2026-11-10)
 
 Mesa ao vivo.
