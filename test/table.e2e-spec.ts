@@ -286,6 +286,65 @@ describe('Table gateway (e2e)', () => {
     await send(master.socket, 'token:delete', { id: tokenId });
   });
 
+  it('sends ??? to players for a token whose name is hidden', async () => {
+    const master = await open(sessions.mestre.token);
+    const player = await open(sessions.jogador1.token);
+
+    const playerSeesCreation = next<TokenData & { label: string }>(
+      player.socket,
+      'token:created',
+    );
+    const created = await send<TokenData & { label: string; sex: string }>(
+      master.socket,
+      'token:create',
+      {
+        label: 'Kian',
+        kind: 'agent',
+        sex: 'male',
+        nameHidden: true,
+        ownerId: sessions.jogador1.userId,
+        col: 6,
+        row: 6,
+      },
+    );
+    expect(created.data).toMatchObject({ label: 'Kian', sex: 'male' });
+    expect(await playerSeesCreation).toMatchObject({
+      label: '???',
+      sex: 'male',
+    });
+
+    const moved = await send<{ label: string }>(player.socket, 'token:move', {
+      id: created.data!.id,
+      col: 7,
+      row: 6,
+    });
+    expect(moved.data?.label).toBe('???');
+
+    const late = await open(sessions.jogador2.token);
+    const snapshotLabel = late.snapshot.tokens.find(
+      (token) => token.id === created.data!.id,
+    ) as { label?: string } | undefined;
+    expect(snapshotLabel?.label).toBe('???');
+
+    const playerSeesName = next<{ label: string }>(
+      player.socket,
+      'token:updated',
+    );
+    await send(master.socket, 'token:update', {
+      id: created.data!.id,
+      nameHidden: false,
+    });
+    expect((await playerSeesName).label).toBe('Kian');
+
+    const badSex = await send(master.socket, 'token:update', {
+      id: created.data!.id,
+      sex: 'robot',
+    });
+    expect(badSex.error?.code).toBe('INVALID_PAYLOAD');
+
+    await send(master.socket, 'token:delete', { id: created.data!.id });
+  });
+
   it('delivers chat and rolls only to who may see them', async () => {
     const master = await open(sessions.mestre.token);
     const player = await open(sessions.jogador1.token);

@@ -23,7 +23,9 @@ const agentInput = {
   label: 'Dante',
   kind: 'agent' as const,
   icon: null,
+  sex: null,
   hidden: false,
+  nameHidden: false,
   ownerId: 'player-1',
   col: 0,
   row: 0,
@@ -255,6 +257,49 @@ describe('token use cases', () => {
       expect(swapped.token.icon).toBe('raven');
       expect(kept.token.icon).toBe('raven');
       expect(cleared.token.icon).toBeNull();
+    });
+  });
+
+  describe('hidden names', () => {
+    it('shows ??? to players and the real name to the master', async () => {
+      await create.execute(master, {
+        ...agentInput,
+        label: 'Kian',
+        sex: 'male',
+        nameHidden: true,
+      });
+
+      const [forMaster] = await list.execute(master);
+      const [forPlayer] = await list.execute(player);
+
+      expect(forMaster).toMatchObject({
+        label: 'Kian',
+        sex: 'male',
+        nameHidden: true,
+      });
+      expect(forPlayer).toMatchObject({
+        label: '???',
+        sex: 'male',
+        nameHidden: true,
+      });
+    });
+
+    it('keeps the sex and the hidden name across edits until the master changes them', async () => {
+      const { id } = await create.execute(master, {
+        ...agentInput,
+        sex: 'female',
+        nameHidden: true,
+      });
+
+      const kept = await update.execute(master, { id, size: 2 });
+      const revealed = await update.execute(master, {
+        id,
+        nameHidden: false,
+        sex: null,
+      });
+
+      expect(kept.token).toMatchObject({ sex: 'female', nameHidden: true });
+      expect(revealed.token).toMatchObject({ sex: null, nameHidden: false });
     });
   });
 });

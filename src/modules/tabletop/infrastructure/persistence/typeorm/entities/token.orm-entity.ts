@@ -12,6 +12,10 @@ import {
 import { UserOrmEntity } from '../../../../../users/infrastructure/persistence/typeorm/entities/user.orm-entity';
 import type { TokenIcon } from '../../../../domain/value-objects/token-icon';
 import {
+  TOKEN_SEXES,
+  type TokenSex,
+} from '../../../../domain/value-objects/token-sex';
+import {
   TOKEN_KINDS,
   type TokenKind,
 } from '../../../../domain/value-objects/token-kind';
@@ -37,8 +41,19 @@ export class TokenOrmEntity {
   @Column({ type: 'varchar', length: 48, nullable: true })
   icon: TokenIcon | null;
 
+  @Column({
+    type: 'enum',
+    enum: TOKEN_SEXES,
+    enumName: 'token_sex',
+    nullable: true,
+  })
+  sex: TokenSex | null;
+
   @Column({ type: 'boolean', default: false })
   hidden: boolean;
+
+  @Column({ name: 'name_hidden', type: 'boolean', default: false })
+  nameHidden: boolean;
 
   @Index('ix_tokens_owner_id')
   @Column({ name: 'owner_id', type: 'uuid', nullable: true })

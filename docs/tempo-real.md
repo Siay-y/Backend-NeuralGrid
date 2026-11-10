@@ -40,8 +40,8 @@ fire-and-forget.
 
 | Evento | Quem pode | Payload | Resposta |
 | --- | --- | --- | --- |
-| `token:create` | mestre | `{ label, kind, icon?, hidden?, ownerId?, col, row, size? }` | token criado |
-| `token:update` | mestre | `{ id, label?, kind?, icon?, hidden?, ownerId?, size? }` | token atualizado |
+| `token:create` | mestre | `{ label, kind, icon?, sex?, hidden?, nameHidden?, ownerId?, col, row, size? }` | token criado |
+| `token:update` | mestre | `{ id, label?, kind?, icon?, sex?, hidden?, nameHidden?, ownerId?, size? }` | token atualizado |
 | `token:move` | mestre ou dono | `{ id, col, row }` | token com `version` nova |
 | `token:drag` | mestre ou dono | `{ id, col, row }` | nenhuma |
 | `token:delete` | mestre | `{ id }` | `{ id }` |
@@ -88,6 +88,8 @@ saem do servidor.
 | `label` | 1 a 32 caracteres, sem espaços nas pontas |
 | `icon` | um id da lista `TOKEN_ICONS` ou `null` (mostra as iniciais) |
 | `hidden` | `true` deixa o token só para o mestre |
+| `sex` | `female`, `male`, `other` ou `null` |
+| `nameHidden` | `true` troca o nome por `???` para os jogadores |
 | `ownerId` | um usuário da mesa ou `null`; se o usuário for removido, vira `null` |
 | `col`, `row` | inteiros entre -500 e 500 |
 | `size` | 1 a 4 células por lado |
@@ -118,6 +120,11 @@ lugar:
 
 Para o jogador, um token oculto não existe: mover ou arrastar responde
 `TOKEN_NOT_FOUND`, mesmo que ele seja o dono.
+
+**Nome oculto.** Com `nameHidden`, o token continua visível, mas `viewFor`
+troca o `label` por `???` em tudo que vai para um jogador: snapshot,
+`token:created`, `token:updated` e a resposta do `token:move` que ele mesmo
+fez. O nome real só chega aos mestres.
 
 **Versão.** O servidor é a fonte da verdade e o último movimento gravado vence.
 O campo `version` deixa o cliente descartar uma atualização mais velha que

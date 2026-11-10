@@ -2,6 +2,7 @@ import { InvalidTokenError } from '../errors/invalid-token.error';
 import { gridPosition } from '../value-objects/grid-position';
 import { isTokenIcon, type TokenIcon } from '../value-objects/token-icon';
 import { isTokenKind, type TokenKind } from '../value-objects/token-kind';
+import { isTokenSex, type TokenSex } from '../value-objects/token-sex';
 
 export const TOKEN_LABEL_MAX_LENGTH = 32;
 export const TOKEN_MIN_SIZE = 1;
@@ -12,7 +13,9 @@ export interface TokenProps {
   label: string;
   kind: TokenKind;
   icon: TokenIcon | null;
+  sex: TokenSex | null;
   hidden: boolean;
+  nameHidden: boolean;
   ownerId: string | null;
   col: number;
   row: number;
@@ -26,7 +29,9 @@ export interface TokenDetails {
   label: string;
   kind: TokenKind;
   icon: TokenIcon | null;
+  sex: TokenSex | null;
   hidden: boolean;
+  nameHidden: boolean;
   ownerId: string | null;
   size: number;
 }
@@ -67,6 +72,16 @@ function assertIcon(icon: unknown): TokenIcon | null {
   return icon;
 }
 
+function assertSex(sex: unknown): TokenSex | null {
+  if (sex === null) {
+    return null;
+  }
+  if (!isTokenSex(sex)) {
+    throw new InvalidTokenError('Sexo do token desconhecido');
+  }
+  return sex;
+}
+
 function assertSize(size: number): number {
   if (
     !Number.isInteger(size) ||
@@ -85,7 +100,9 @@ function validDetails(details: TokenDetails): TokenDetails {
     label: assertLabel(details.label),
     kind: assertKind(details.kind),
     icon: assertIcon(details.icon),
+    sex: assertSex(details.sex),
     hidden: details.hidden === true,
+    nameHidden: details.nameHidden === true,
     ownerId: details.ownerId,
     size: assertSize(details.size),
   };
@@ -129,6 +146,14 @@ export class Token {
 
   get hidden(): boolean {
     return this.props.hidden;
+  }
+
+  get sex(): TokenSex | null {
+    return this.props.sex;
+  }
+
+  get nameHidden(): boolean {
+    return this.props.nameHidden;
   }
 
   get ownerId(): string | null {
