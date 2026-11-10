@@ -26,7 +26,7 @@ describe('Auth (e2e)', () => {
     await app.init();
     server = app.getHttpServer() as App;
 
-    await app.get(DataSource).query('TRUNCATE TABLE "users"');
+    await app.get(DataSource).query('TRUNCATE TABLE "users" CASCADE');
     const provision = app.get(ProvisionUserUseCase);
     await provision.execute({
       username: 'mestre',

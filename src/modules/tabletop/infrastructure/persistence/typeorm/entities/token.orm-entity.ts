@@ -1,0 +1,61 @@
+import {
+  Check,
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+import { UserOrmEntity } from '../../../../../users/infrastructure/persistence/typeorm/entities/user.orm-entity';
+import {
+  TOKEN_KINDS,
+  type TokenKind,
+} from '../../../../domain/value-objects/token-kind';
+
+@Entity({ name: 'tokens' })
+@Check('ck_tokens_label_not_blank', `length(btrim("label")) > 0`)
+@Check('ck_tokens_size', `"size" BETWEEN 1 AND 4`)
+@Check(
+  'ck_tokens_position',
+  `"col" BETWEEN -500 AND 500 AND "row" BETWEEN -500 AND 500`,
+)
+@Check('ck_tokens_version', `"version" >= 1`)
+export class TokenOrmEntity {
+  @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'pk_tokens' })
+  id: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  label: string;
+
+  @Column({ type: 'enum', enum: TOKEN_KINDS, enumName: 'token_kind' })
+  kind: TokenKind;
+
+  @Index('ix_tokens_owner_id')
+  @Column({ name: 'owner_id', type: 'uuid', nullable: true })
+  ownerId: string | null;
+
+  @ManyToOne(() => UserOrmEntity, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'owner_id', foreignKeyConstraintName: 'fk_tokens_owner' })
+  owner?: UserOrmEntity | null;
+
+  @Column({ type: 'integer' })
+  col: number;
+
+  @Column({ type: 'integer' })
+  row: number;
+
+  @Column({ type: 'smallint', default: 1 })
+  size: number;
+
+  @Column({ type: 'integer', default: 1 })
+  version: number;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt: Date;
+}

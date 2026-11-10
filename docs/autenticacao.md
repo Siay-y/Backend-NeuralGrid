@@ -110,21 +110,29 @@ createMap(@CurrentUser() user: AuthenticatedUser) { ... }
 - **ValidationPipe** com `whitelist` e `forbidNonWhitelisted`: um campo que o DTO
   não declara é erro, não é ignorado em silêncio.
 
-## Caminho para WebSockets
+## WebSockets
 
-A Etapa 2 traz o Socket.io. A autenticação já foi separada para isso:
+O Socket.io usa o mesmo JWT, validado uma vez no handshake:
 
-- `ResolveSessionUserUseCase` não conhece HTTP. Um `WsJwtGuard` verifica o token
-  enviado no handshake com o `JwtService` exportado pelo `AuthModule` e chama o
-  mesmo caso de uso.
-- `getRequestUser` lê o usuário de `request.user` em HTTP e de
-  `client.data.user` em WebSocket. `RolesGuard` e `@CurrentUser()` funcionam nos
-  dois contextos sem alteração.
-- O gateway deve validar o token na conexão e desconectar o socket quando ele
-  expirar, já que não há requisição nova para revalidar.
+- `AuthenticateAccessTokenUseCase` junta o `AccessTokenVerifier` (assinatura,
+  algoritmo, `iss`, `aud` e `exp`) com o `ResolveSessionUserUseCase` (conta e
+  papel ainda batem com o banco). É o único caso de uso que o `AuthModule`
+  exporta para outros módulos.
+- O usuário resolvido fica em `socket.data.user`. `getRequestUser` lê dali no
+  contexto `ws`, então `RolesGuard` e `@CurrentUser()` funcionam sem alteração.
+- Os guards globais também rodam nos eventos de socket. O `JwtAuthGuard` exige o
+  usuário do handshake no contexto `ws` e recusa qualquer outro tipo de
+  transporte; o `AppThrottlerGuard` só atua em HTTP, e o socket tem um limite de
+  taxa próprio.
+- O socket é derrubado no instante em que o token expira.
+
+Os detalhes do protocolo estão em [Tempo real](tempo-real.md).
 
 ## O que ainda falta
 
 - Refresh token com rotação, para sessões mais longas que `JWT_EXPIRES_IN`.
-- Storage do Throttler no Redis, se a API passar de uma instância.
+- Derrubar na hora o socket de uma conta removida ou com papel alterado. Hoje
+  isso acontece no próximo handshake ou na expiração do token.
+- Storage do Throttler e adapter do Socket.io no Redis, se a API passar de uma
+  instância.
 - Registro de auditoria dos logins, com IP e resultado.

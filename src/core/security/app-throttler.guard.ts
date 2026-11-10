@@ -8,6 +8,10 @@ import type { Response } from 'express';
 
 @Injectable()
 export class AppThrottlerGuard extends ThrottlerGuard {
+  protected shouldSkip(context: ExecutionContext): Promise<boolean> {
+    return Promise.resolve(context.getType() !== 'http');
+  }
+
   protected throwThrottlingException(
     context: ExecutionContext,
     detail: ThrottlerLimitDetail,

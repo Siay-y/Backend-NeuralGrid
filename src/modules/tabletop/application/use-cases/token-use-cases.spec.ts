@@ -1,0 +1,184 @@
+import { GetUserByIdUseCase } from '../../../users/application/use-cases/get-user-by-id.use-case';
+import { User } from '../../../users/domain/entities/user';
+import { Username } from '../../../users/domain/value-objects/username';
+import { InMemoryUserRepository } from '../../../users/testing/in-memory-user.repository';
+import { InvalidTokenError } from '../../domain/errors/invalid-token.error';
+import { TokenForbiddenError } from '../../domain/errors/token-forbidden.error';
+import { TokenNotFoundError } from '../../domain/errors/token-not-found.error';
+import type { TableActor } from '../../domain/policies/token-policy';
+import { InMemoryTokenRepository } from '../../testing/in-memory-token.repository';
+import { TokenOwnerValidator } from '../services/token-owner-validator';
+import { AuthorizeTokenDragUseCase } from './authorize-token-drag.use-case';
+import { CreateTokenUseCase } from './create-token.use-case';
+import { DeleteTokenUseCase } from './delete-token.use-case';
+import { MoveTokenUseCase } from './move-token.use-case';
+import { UpdateTokenUseCase } from './update-token.use-case';
+
+const master: TableActor = { id: 'master-1', role: 'master' };
+const player: TableActor = { id: 'player-1', role: 'player' };
+const otherPlayer: TableActor = { id: 'player-2', role: 'player' };
+
+const agentInput = {
+  label: 'Dante',
+  kind: 'agent' as const,
+  ownerId: 'player-1',
+  col: 0,
+  row: 0,
+  size: 1,
+};
+
+describe('token use cases', () => {
+  let tokens: InMemoryTokenRepository;
+  let create: CreateTokenUseCase;
+  let update: UpdateTokenUseCase;
+  let move: MoveTokenUseCase;
+  let drag: AuthorizeTokenDragUseCase;
+  let remove: DeleteTokenUseCase;
+
+  beforeEach(async () => {
+    const users = new InMemoryUserRepository();
+    for (const [id, role] of [
+      ['master-1', 'master'],
+      ['player-1', 'player'],
+      ['player-2', 'player'],
+    ] as const) {
+      await users.save(
+        User.create({
+          id,
+          username: Username.create(id),
+          displayName: id,
+          role,
+          passwordHash: 'hash',
+          now: new Date(),
+        }),
+      );
+    }
+
+    tokens = new InMemoryTokenRepository();
+    const owners = new TokenOwnerValidator(new GetUserByIdUseCase(users));
+    create = new CreateTokenUseCase(tokens, owners);
+    update = new UpdateTokenUseCase(tokens, owners);
+    move = new MoveTokenUseCase(tokens);
+    drag = new AuthorizeTokenDragUseCase(tokens);
+    remove = new DeleteTokenUseCase(tokens);
+  });
+
+  describe('create', () => {
+    it('lets the master place a token', async () => {
+      const token = await create.execute(master, agentInput);
+
+      expect(token).toMatchObject({
+        label: 'Dante',
+        ownerId: 'player-1',
+        version: 1,
+      });
+      expect(await tokens.findById(token.id)).not.toBeNull();
+    });
+
+    it('refuses players', async () => {
+      await expect(create.execute(player, agentInput)).rejects.toBeInstanceOf(
+        TokenForbiddenError,
+      );
+    });
+
+    it('refuses an owner who is not part of the table', async () => {
+      await expect(
+        create.execute(master, { ...agentInput, ownerId: 'stranger' }),
+      ).rejects.toBeInstanceOf(InvalidTokenError);
+    });
+  });
+
+  describe('move', () => {
+    it('lets a player move a token they own', async () => {
+      const { id } = await create.execute(master, agentInput);
+
+      const moved = await move.execute(player, { id, col: 3, row: 4 });
+
+      expect(moved).toMatchObject({ col: 3, row: 4, version: 2 });
+    });
+
+    it("blocks a player from moving someone else's token", async () => {
+      const { id } = await create.execute(master, agentInput);
+
+      await expect(
+        move.execute(otherPlayer, { id, col: 1, row: 1 }),
+      ).rejects.toBeInstanceOf(TokenForbiddenError);
+    });
+
+    it('lets the master move any token', async () => {
+      const { id } = await create.execute(master, {
+        ...agentInput,
+        ownerId: null,
+      });
+
+      await expect(
+        move.execute(master, { id, col: 9, row: 9 }),
+      ).resolves.toMatchObject({
+        col: 9,
+      });
+    });
+
+    it('reports a token that no longer exists', async () => {
+      await expect(
+        move.execute(master, { id: 'missing', col: 0, row: 0 }),
+      ).rejects.toBeInstanceOf(TokenNotFoundError);
+    });
+  });
+
+  describe('drag preview', () => {
+    it('applies the same ownership rule without persisting', async () => {
+      const { id } = await create.execute(master, agentInput);
+
+      await expect(
+        drag.execute(player, { id, col: 2, row: 2 }),
+      ).resolves.toEqual({
+        id,
+        by: 'player-1',
+        col: 2,
+        row: 2,
+      });
+      await expect(
+        drag.execute(otherPlayer, { id, col: 2, row: 2 }),
+      ).rejects.toBeInstanceOf(TokenForbiddenError);
+      expect((await tokens.findById(id))?.col).toBe(0);
+    });
+  });
+
+  describe('update and delete', () => {
+    it('lets the master hand a token to another player', async () => {
+      const { id } = await create.execute(master, agentInput);
+
+      const updated = await update.execute(master, {
+        id,
+        ownerId: 'player-2',
+        size: 2,
+      });
+
+      expect(updated).toMatchObject({
+        ownerId: 'player-2',
+        size: 2,
+        label: 'Dante',
+      });
+    });
+
+    it('refuses edits and removals from players', async () => {
+      const { id } = await create.execute(master, agentInput);
+
+      await expect(
+        update.execute(player, { id, label: 'X' }),
+      ).rejects.toBeInstanceOf(TokenForbiddenError);
+      await expect(remove.execute(player, id)).rejects.toBeInstanceOf(
+        TokenForbiddenError,
+      );
+    });
+
+    it('removes a token for the master', async () => {
+      const { id } = await create.execute(master, agentInput);
+
+      await expect(remove.execute(master, id)).resolves.toEqual({ id });
+      await expect(remove.execute(master, id)).rejects.toBeInstanceOf(
+        TokenNotFoundError,
+      );
+    });
+  });
+});
