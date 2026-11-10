@@ -8,6 +8,7 @@ import {
 import { TokenRepository } from '../../domain/repositories/token.repository';
 import type { TokenIcon } from '../../domain/value-objects/token-icon';
 import type { TokenKind } from '../../domain/value-objects/token-kind';
+import type { TokenSex } from '../../domain/value-objects/token-sex';
 import { toTokenView, TokenView } from '../dtos/token-view';
 import { TokenOwnerValidator } from '../services/token-owner-validator';
 
@@ -15,7 +16,9 @@ export interface CreateTokenInput {
   label: string;
   kind: TokenKind;
   icon: TokenIcon | null;
+  sex: TokenSex | null;
   hidden: boolean;
+  nameHidden: boolean;
   ownerId: string | null;
   col: number;
   row: number;

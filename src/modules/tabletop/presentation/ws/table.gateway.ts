@@ -22,7 +22,11 @@ import { RollDiceUseCase } from '../../../chat/application/use-cases/roll-dice.u
 import { SendMessageUseCase } from '../../../chat/application/use-cases/send-message.use-case';
 import { AuthenticateAccessTokenUseCase } from '../../../auth/application/use-cases/authenticate-access-token.use-case';
 import { ListUsersUseCase } from '../../../users/application/use-cases/list-users.use-case';
-import type { TokenView } from '../../application/dtos/token-view';
+import {
+  type TokenView,
+  viewFor,
+  viewForPlayers,
+} from '../../application/dtos/token-view';
 import { AuthorizeTokenDragUseCase } from '../../application/use-cases/authorize-token-drag.use-case';
 import { CreateTokenUseCase } from '../../application/use-cases/create-token.use-case';
 import { DeleteTokenUseCase } from '../../application/use-cases/delete-token.use-case';
@@ -173,7 +177,9 @@ export class TableGateway
         label: dto.label,
         kind: dto.kind,
         icon: dto.icon ?? null,
+        sex: dto.sex ?? null,
         hidden: dto.hidden ?? false,
+        nameHidden: dto.nameHidden ?? false,
         ownerId: dto.ownerId ?? null,
         col: dto.col,
         row: dto.row,
@@ -206,7 +212,7 @@ export class TableGateway
       const dto = await parsePayload(TokenPositionDto, body);
       const token = await this.moveToken.execute(actor, dto);
       this.publishToken(TableServerEvent.TokenUpdated, token, token.hidden);
-      return token;
+      return viewFor(actor, token);
     });
   }
 
@@ -292,7 +298,7 @@ export class TableGateway
     this.server.to(MASTERS_ROOM).emit(event, token);
     const players = this.server.except(MASTERS_ROOM);
     if (!token.hidden) {
-      players.emit(event, token);
+      players.emit(event, viewForPlayers(token));
     } else if (!wasHidden) {
       players.emit(TableServerEvent.TokenDeleted, { id: token.id });
     }

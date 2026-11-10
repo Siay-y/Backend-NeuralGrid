@@ -6,6 +6,19 @@ do roadmap e o patch a cada melhoria ou correção. As notas para os jogadores
 ficam na aba Atualizações do
 [frontend](https://github.com/Siay-y/Frontend-NeuralGrid).
 
+## 0.3.2 (2026-11-10)
+
+Sexo e nome oculto.
+
+### Novo
+
+- Campo `sex` no token: `female`, `male`, `other` ou `null`, guardado no enum
+  `token_sex`.
+- Campo `nameHidden`: os jogadores recebem `???` no lugar do nome, no snapshot,
+  nos eventos e na resposta do próprio movimento. O nome real nunca sai do
+  servidor para eles; o mestre continua recebendo tudo.
+- Migration `AddTokenSexAndNameVisibility`, aplicada sozinha no boot.
+
 ## 0.3.1 (2026-11-10)
 
 Ícones e tokens ocultos.

@@ -7,6 +7,7 @@ import { CreateUsers1762790400000 } from './migrations/1762790400000-create-user
 import { CreateTokens1763337600000 } from './migrations/1763337600000-create-tokens';
 import { CreateChatMessages1763942400000 } from './migrations/1763942400000-create-chat-messages';
 import { AddTokenIconAndVisibility1764547200000 } from './migrations/1764547200000-add-token-icon-and-visibility';
+import { AddTokenSexAndNameVisibility1765152000000 } from './migrations/1765152000000-add-token-sex-and-name-visibility';
 
 export interface DatabaseSettings {
   url: string;
@@ -41,6 +42,7 @@ export function buildDataSourceOptions(
       CreateTokens1763337600000,
       CreateChatMessages1763942400000,
       AddTokenIconAndVisibility1764547200000,
+      AddTokenSexAndNameVisibility1765152000000,
     ],
     migrationsTableName: 'typeorm_migrations',
     uuidExtension: 'pgcrypto',

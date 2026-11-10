@@ -4,7 +4,7 @@ import {
   TokenPolicy,
 } from '../../domain/policies/token-policy';
 import { TokenRepository } from '../../domain/repositories/token.repository';
-import { toTokenView, TokenView } from '../dtos/token-view';
+import { toTokenView, TokenView, viewFor } from '../dtos/token-view';
 
 @Injectable()
 export class ListTokensUseCase {
@@ -14,6 +14,6 @@ export class ListTokensUseCase {
     const tokens = await this.tokens.findAll();
     return tokens
       .filter((token) => TokenPolicy.canSee(actor, token))
-      .map(toTokenView);
+      .map((token) => viewFor(actor, toTokenView(token)));
   }
 }

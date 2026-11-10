@@ -22,6 +22,10 @@ import {
   type TokenIcon,
 } from '../../../domain/value-objects/token-icon';
 import {
+  TOKEN_SEXES,
+  type TokenSex,
+} from '../../../domain/value-objects/token-sex';
+import {
   TOKEN_KINDS,
   type TokenKind,
 } from '../../../domain/value-objects/token-kind';
@@ -36,6 +40,8 @@ const SIZE_MESSAGE = `O tamanho precisa ser um inteiro entre ${TOKEN_MIN_SIZE} e
 const POSITION_MESSAGE = `A posição precisa ser um inteiro entre -${GRID_LIMIT} e ${GRID_LIMIT}`;
 const ICON_MESSAGE = 'Ícone de token desconhecido';
 const HIDDEN_MESSAGE = 'A visibilidade precisa ser verdadeiro ou falso';
+const SEX_MESSAGE = 'O sexo precisa ser feminino, masculino, outro ou nulo';
+const NAME_HIDDEN_MESSAGE = 'Esconder o nome precisa ser verdadeiro ou falso';
 const ID_MESSAGE = 'Identificador de token inválido';
 
 export class TokenIdDto {
@@ -73,6 +79,16 @@ export class CreateTokenDto {
   @IsOptional()
   @IsBoolean({ message: HIDDEN_MESSAGE })
   hidden?: boolean;
+
+  @ValidateIf(
+    (dto: CreateTokenDto) => dto.sex !== null && dto.sex !== undefined,
+  )
+  @IsIn(TOKEN_SEXES, { message: SEX_MESSAGE })
+  sex?: TokenSex | null;
+
+  @IsOptional()
+  @IsBoolean({ message: NAME_HIDDEN_MESSAGE })
+  nameHidden?: boolean;
 
   @IsOptional()
   @IsUUID('4', { message: OWNER_MESSAGE })
@@ -115,6 +131,16 @@ export class UpdateTokenDto extends TokenIdDto {
   @IsOptional()
   @IsBoolean({ message: HIDDEN_MESSAGE })
   hidden?: boolean;
+
+  @ValidateIf(
+    (dto: UpdateTokenDto) => dto.sex !== null && dto.sex !== undefined,
+  )
+  @IsIn(TOKEN_SEXES, { message: SEX_MESSAGE })
+  sex?: TokenSex | null;
+
+  @IsOptional()
+  @IsBoolean({ message: NAME_HIDDEN_MESSAGE })
+  nameHidden?: boolean;
 
   @ValidateIf(
     (dto: UpdateTokenDto) => dto.ownerId !== null && dto.ownerId !== undefined,
