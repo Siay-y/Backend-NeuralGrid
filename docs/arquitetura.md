@@ -29,6 +29,7 @@ backend-neural-grid/
     │   │   └── seeds/seed-users.ts    provisionamento das contas da mesa
     │   ├── health/                    GET /api/health
     │   ├── http/configure-http.ts     Helmet, CORS, proxy, body limit, pipes
+    │   ├── realtime/                  AppSocketIoAdapter e configureRealtime
     │   └── security/                  throttlers e @BruteForceProtected()
     │
     ├── shared/
@@ -47,28 +48,50 @@ backend-neural-grid/
         │   ├── application/
         │   │   ├── ports/             PasswordHasher
         │   │   ├── dtos/              UserView, sem hash
-        │   │   └── use-cases/         VerifyCredentials, GetUserById, ProvisionUser
+        │   │   └── use-cases/         VerifyCredentials, GetUserById, ListUsers, ProvisionUser
         │   ├── infrastructure/
         │   │   ├── crypto/            Argon2PasswordHasher
         │   │   └── persistence/typeorm/
         │   ├── testing/               dublês em memória para os testes
         │   └── users.module.ts
         │
-        └── auth/
+        ├── auth/
+        │   ├── application/
+        │   │   ├── ports/             AccessTokenIssuer, AccessTokenVerifier
+        │   │   ├── dtos/              AccessTokenClaims, AuthSession
+        │   │   ├── errors/            InvalidCredentials, InvalidSession
+        │   │   └── use-cases/         Login, ResolveSessionUser, AuthenticateAccessToken
+        │   ├── infrastructure/jwt/    JwtAccessTokenIssuer, JwtAccessTokenVerifier
+        │   ├── presentation/http/
+        │   │   ├── controllers/       AuthController
+        │   │   ├── decorators/        @Roles(), @CurrentUser()
+        │   │   ├── dtos/              LoginRequestDto
+        │   │   ├── guards/            JwtAuthGuard, RolesGuard (http e ws)
+        │   │   ├── strategies/        JwtStrategy (Passport)
+        │   │   └── request-user.ts    lê o usuário em contexto http ou ws
+        │   └── auth.module.ts
+        │
+        └── tabletop/
+            ├── domain/
+            │   ├── entities/          Token
+            │   ├── value-objects/     TokenKind, GridPosition
+            │   ├── policies/          TokenPolicy: quem cria, edita e move
+            │   ├── errors/
+            │   └── repositories/      TokenRepository (porta)
             ├── application/
-            │   ├── ports/             AccessTokenIssuer
-            │   ├── dtos/              AccessTokenClaims, AuthSession
-            │   ├── errors/            InvalidCredentials, InvalidSession
-            │   └── use-cases/         Login, ResolveSessionUser
-            ├── infrastructure/jwt/    JwtAccessTokenIssuer
-            ├── presentation/http/
-            │   ├── controllers/       AuthController
-            │   ├── decorators/        @Roles(), @CurrentUser()
-            │   ├── dtos/              LoginRequestDto
-            │   ├── guards/            JwtAuthGuard, RolesGuard
-            │   ├── strategies/        JwtStrategy (Passport)
-            │   └── request-user.ts    lê o usuário em contexto http ou ws
-            └── auth.module.ts
+            │   ├── dtos/              TokenView
+            │   ├── services/          TokenOwnerValidator
+            │   └── use-cases/         ListTokens, CreateToken, UpdateToken, MoveToken,
+            │                          AuthorizeTokenDrag, DeleteToken
+            ├── infrastructure/persistence/typeorm/
+            ├── presentation/ws/
+            │   ├── table.gateway.ts   handshake, snapshot, eventos e broadcast
+            │   ├── dtos/              DTOs dos eventos com class-validator
+            │   ├── presence-tracker.ts
+            │   ├── socket-rate-limiter.ts
+            │   └── ws-payload.ts      validação de payload e formato do ack
+            ├── testing/
+            └── tabletop.module.ts
 ```
 
 O módulo `auth` não tem camada `domain`: ele não guarda estado próprio. As
@@ -134,26 +157,45 @@ Erros de domínio declaram uma categoria (`invalid`, `unauthorized`, `forbidden`
 `not_found`, `conflict`) e o filtro escolhe o status. Erros inesperados viram
 `500` com mensagem genérica, e o stack vai só para o log.
 
+Os guards globais rodam também nos eventos de WebSocket. Por isso o throttler
+HTTP pula o contexto `ws` e o `JwtAuthGuard` tem um ramo próprio para ele. Os
+filtros globais não alcançam o gateway: lá, cada handler devolve o próprio
+resultado no ack. O desenho completo está em [Tempo real](tempo-real.md).
+
+## Entidades ORM e migrations
+
+As migrations são escritas à mão, em SQL, e as entidades ORM declaram as mesmas
+regras com os mesmos nomes: `@Check`, `@Unique`, `@Index` com `where`, nome da
+chave primária e da chave estrangeira. Assim o `migration:generate` compara
+entidade e banco e não encontra diferença nenhuma.
+
+Se uma regra existir só na migration, o gerador entende que ela sobra e propõe
+removê-la na próxima migration. Antes de commitar uma mudança de schema, rode o
+gerador contra um banco atualizado e confira que ele responde
+`No changes in database schema were found`.
+
 ## Criando um módulo
 
-Para a Etapa 2, um módulo `tables` seguiria o mesmo desenho:
+O módulo `tabletop` é o exemplo mais completo a seguir:
 
-1. Crie `src/modules/tables/{domain,application,infrastructure,presentation}`.
-2. Escreva a entidade e a porta do repositório em `domain`, sem framework.
-3. Escreva os casos de uso em `application`, recebendo portas no construtor.
+1. Crie `src/modules/<nome>/{domain,application,infrastructure,presentation}`.
+2. Escreva a entidade, a política e a porta do repositório em `domain`, sem framework.
+3. Escreva os casos de uso em `application`, recebendo o ator e as portas.
 4. Implemente o repositório em `infrastructure/persistence/typeorm` e registre a
    entidade ORM em `core/database/database.options.ts`.
-5. Gere a migration com `npm run migration:generate -- src/core/database/migrations/CreateTables`
+5. Gere a migration com `npm run migration:generate -- src/core/database/migrations/Nome`
    e adicione a classe gerada ao array `migrations` do mesmo arquivo.
-6. Ligue tudo em `tables.module.ts` e importe o módulo no `AppModule`.
+6. Ligue tudo no módulo e importe-o no `AppModule`.
 
 Rotas novas já nascem exigindo token. Para restringir ao mestre, basta
 `@Roles('master')`.
 
 ## Testes
 
-- **Unitários** (`src/**/*.spec.ts`): casos de uso com os dublês de
-  `modules/users/testing`, sem banco e sem NestJS.
+- **Unitários** (`src/**/*.spec.ts`): entidades, políticas e casos de uso com os
+  dublês em memória de `modules/*/testing`, sem banco e sem NestJS.
 - **E2E** (`test/*.e2e-spec.ts`): sobem o `AppModule` inteiro contra o banco
-  `neuralgrid_test` e percorrem o pipeline HTTP real, incluindo throttling e
-  rejeição de token adulterado. Variáveis próprias podem ir num `.env.test`.
+  `neuralgrid_test`. `auth.e2e-spec.ts` percorre o pipeline HTTP, incluindo
+  throttling e token adulterado; `table.e2e-spec.ts` conecta clientes Socket.io
+  reais e cobre o ciclo completo dos tokens. Variáveis próprias podem ir num
+  `.env.test`.

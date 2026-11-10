@@ -46,6 +46,8 @@ O cliente Angular vive em
 | Senhas | Argon2id com os parâmetros mínimos da OWASP (19 MiB, 2 iterações) |
 | Força bruta | Throttler com três limites: global, por IP no login e por conta no login |
 | Autorização | Guard global fail-closed, `@Public()` explícito e `@Roles('master', 'player')` |
+| Tempo real | Socket.io no namespace `/table`, autenticado no handshake pelo mesmo JWT |
+| Tokens | Agentes, NPCs e ameaças com posse, versão e permissões checadas no servidor |
 | Validação | DTOs com `class-validator`, campos desconhecidos rejeitados com `400` |
 | Erros | Filtro global com corpo único `{ statusCode, error, message }` |
 | Banco | PostgreSQL com migrations versionadas, regras repetidas em `CHECK` |
@@ -68,9 +70,14 @@ O cliente Angular vive em
   preciso marcá-la com `@Public()`, de propósito.
 - **Seed sem senha no repositório.** O script gera senhas aleatórias de 24
   caracteres, grava apenas o hash e mostra cada senha uma única vez no terminal.
-- **Pronto para WebSockets.** Os guards leem o usuário pelo tipo de contexto
-  (`http` ou `ws`), e a resolução da sessão é um caso de uso independente de
-  transporte. A Etapa 2 pluga o gateway sem reescrever a autenticação.
+- **Mesa ao vivo.** O mestre cria, edita e remove tokens; cada jogador move só
+  os seus. Enquanto alguém arrasta, os outros veem a prévia célula a célula, e
+  a posição final é gravada no banco com número de versão.
+- **O servidor decide.** Toda ação pelo socket passa pela mesma validação de
+  DTO, pela mesma política de permissão e responde com `{ ok, data }` ou
+  `{ ok, error }`. Nenhuma regra mora só no cliente.
+- **Presença e sessão.** A mesa sabe quem está conectado, e o socket cai sozinho
+  quando o JWT expira.
 
 ---
 
@@ -90,13 +97,15 @@ src/
 │   ├── database/                 opções do TypeORM, migrations e seed
 │   ├── health/                   GET /api/health
 │   ├── http/                     Helmet, CORS, proxy, body limit e ValidationPipe
+│   ├── realtime/                 adapter do Socket.io: CORS, origem e limites
 │   └── security/                 throttlers e guard que emite Retry-After
 ├── shared/
 │   ├── domain/errors/            DomainError: base de todo erro de negócio
 │   └── presentation/http/        @Public() e filtro global de exceções
 └── modules/
     ├── users/                    identidade, credenciais e hash de senha
-    └── auth/                     login, emissão de JWT, strategy e guards
+    ├── auth/                     login, emissão e verificação de JWT, guards
+    └── tabletop/                 tokens, permissões, presença e gateway /table
 ```
 
 A árvore completa, a regra de dependência entre camadas e como criar um novo
@@ -232,7 +241,10 @@ e a API num Web Service do Render.
 
 O plano gratuito do Render hiberna o serviço depois de 15 minutos sem tráfego,
 e a primeira requisição seguinte leva até um minuto. O frontend avisa o jogador
-quando o login demora por esse motivo. O passo a passo com as armadilhas de cada
+quando o login demora por esse motivo e, enquanto a mesa estiver aberta, faz
+uma chamada leve ao `/api/health` a cada 10 minutos para o serviço não dormir
+no meio da sessão. WebSockets funcionam no Web Service do Render sem
+configuração extra. O passo a passo com as armadilhas de cada
 provedor está em [docs/deploy.md](docs/deploy.md).
 
 ---
@@ -240,7 +252,8 @@ provedor está em [docs/deploy.md](docs/deploy.md).
 ## Documentação
 
 - [Arquitetura](docs/arquitetura.md): camadas, regra de dependência e como criar um módulo.
-- [Autenticação e segurança](docs/autenticacao.md): fluxo de login, JWT, throttling, guards e o caminho para WebSockets.
+- [Autenticação e segurança](docs/autenticacao.md): fluxo de login, JWT, throttling e guards em HTTP e WebSocket.
+- [Tempo real](docs/tempo-real.md): protocolo do namespace `/table`, permissões, presença e limites.
 - [Deploy](docs/deploy.md): Render, Neon, Supabase e rotação de segredos.
 
 ---

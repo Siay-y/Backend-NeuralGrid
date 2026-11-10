@@ -15,6 +15,10 @@ export class InMemoryUserRepository extends UserRepository {
     return Promise.resolve(match ?? null);
   }
 
+  findAll(): Promise<User[]> {
+    return Promise.resolve([...this.users.values()]);
+  }
+
   save(user: User): Promise<void> {
     this.users.set(user.id, user);
     return Promise.resolve();

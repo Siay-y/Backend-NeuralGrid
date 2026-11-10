@@ -25,6 +25,11 @@ export class TypeOrmUserRepository extends UserRepository {
     return row ? UserMapper.toDomain(row) : null;
   }
 
+  async findAll(): Promise<User[]> {
+    const rows = await this.rows.find({ order: { createdAt: 'ASC' } });
+    return rows.map((row) => UserMapper.toDomain(row));
+  }
+
   async save(user: User): Promise<void> {
     await this.rows.save(UserMapper.toOrm(user));
   }

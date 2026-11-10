@@ -5,7 +5,9 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
+import { WsException } from '@nestjs/websockets';
 import { IS_PUBLIC_KEY } from '../../../../../shared/presentation/http/decorators/public.decorator';
+import { getRequestUser } from '../request-user';
 import { JWT_STRATEGY } from '../strategies/jwt.strategy';
 
 @Injectable()
@@ -22,7 +24,20 @@ export class JwtAuthGuard extends AuthGuard(JWT_STRATEGY) {
     if (isPublic) {
       return true;
     }
-    return super.canActivate(context);
+
+    // Sockets authenticate once, during the handshake, and carry the resolved
+    // user afterwards. Any other transport is refused instead of let through.
+    switch (context.getType()) {
+      case 'http':
+        return super.canActivate(context);
+      case 'ws':
+        if (!getRequestUser(context)) {
+          throw new WsException('Sessão inválida ou expirada');
+        }
+        return true;
+      default:
+        return false;
+    }
   }
 
   handleRequest<TUser>(error: unknown, user: TUser | false): TUser {

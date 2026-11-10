@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PasswordHasher } from './application/ports/password-hasher';
 import { GetUserByIdUseCase } from './application/use-cases/get-user-by-id.use-case';
+import { ListUsersUseCase } from './application/use-cases/list-users.use-case';
 import { ProvisionUserUseCase } from './application/use-cases/provision-user.use-case';
 import { VerifyCredentialsUseCase } from './application/use-cases/verify-credentials.use-case';
 import { UserRepository } from './domain/repositories/user.repository';
@@ -16,8 +17,14 @@ import { TypeOrmUserRepository } from './infrastructure/persistence/typeorm/repo
     { provide: PasswordHasher, useClass: Argon2PasswordHasher },
     VerifyCredentialsUseCase,
     GetUserByIdUseCase,
+    ListUsersUseCase,
     ProvisionUserUseCase,
   ],
-  exports: [VerifyCredentialsUseCase, GetUserByIdUseCase, ProvisionUserUseCase],
+  exports: [
+    VerifyCredentialsUseCase,
+    GetUserByIdUseCase,
+    ListUsersUseCase,
+    ProvisionUserUseCase,
+  ],
 })
 export class UsersModule {}
