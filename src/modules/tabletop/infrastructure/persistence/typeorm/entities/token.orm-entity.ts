@@ -10,6 +10,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { UserOrmEntity } from '../../../../../users/infrastructure/persistence/typeorm/entities/user.orm-entity';
+import type { TokenIcon } from '../../../../domain/value-objects/token-icon';
 import {
   TOKEN_KINDS,
   type TokenKind,
@@ -32,6 +33,12 @@ export class TokenOrmEntity {
 
   @Column({ type: 'enum', enum: TOKEN_KINDS, enumName: 'token_kind' })
   kind: TokenKind;
+
+  @Column({ type: 'varchar', length: 48, nullable: true })
+  icon: TokenIcon | null;
+
+  @Column({ type: 'boolean', default: false })
+  hidden: boolean;
 
   @Index('ix_tokens_owner_id')
   @Column({ name: 'owner_id', type: 'uuid', nullable: true })

@@ -6,16 +6,21 @@ import {
 } from '../../domain/policies/token-policy';
 import { TokenRepository } from '../../domain/repositories/token.repository';
 
+export interface TokenRemoval {
+  id: string;
+  wasHidden: boolean;
+}
+
 @Injectable()
 export class DeleteTokenUseCase {
   constructor(private readonly tokens: TokenRepository) {}
 
-  async execute(actor: TableActor, id: string): Promise<{ id: string }> {
+  async execute(actor: TableActor, id: string): Promise<TokenRemoval> {
     TokenPolicy.assertCanManage(actor);
-    const deleted = await this.tokens.delete(id);
-    if (!deleted) {
+    const token = await this.tokens.findById(id);
+    if (!token || !(await this.tokens.delete(id))) {
       throw new TokenNotFoundError();
     }
-    return { id };
+    return { id, wasHidden: token.hidden };
   }
 }

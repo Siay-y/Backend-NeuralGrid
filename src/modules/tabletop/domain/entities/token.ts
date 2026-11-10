@@ -1,5 +1,6 @@
 import { InvalidTokenError } from '../errors/invalid-token.error';
 import { gridPosition } from '../value-objects/grid-position';
+import { isTokenIcon, type TokenIcon } from '../value-objects/token-icon';
 import { isTokenKind, type TokenKind } from '../value-objects/token-kind';
 
 export const TOKEN_LABEL_MAX_LENGTH = 32;
@@ -10,6 +11,8 @@ export interface TokenProps {
   id: string;
   label: string;
   kind: TokenKind;
+  icon: TokenIcon | null;
+  hidden: boolean;
   ownerId: string | null;
   col: number;
   row: number;
@@ -22,6 +25,8 @@ export interface TokenProps {
 export interface TokenDetails {
   label: string;
   kind: TokenKind;
+  icon: TokenIcon | null;
+  hidden: boolean;
   ownerId: string | null;
   size: number;
 }
@@ -52,6 +57,16 @@ function assertKind(kind: unknown): TokenKind {
   return kind;
 }
 
+function assertIcon(icon: unknown): TokenIcon | null {
+  if (icon === null) {
+    return null;
+  }
+  if (!isTokenIcon(icon)) {
+    throw new InvalidTokenError('Ícone de token desconhecido');
+  }
+  return icon;
+}
+
 function assertSize(size: number): number {
   if (
     !Number.isInteger(size) ||
@@ -69,6 +84,8 @@ function validDetails(details: TokenDetails): TokenDetails {
   return {
     label: assertLabel(details.label),
     kind: assertKind(details.kind),
+    icon: assertIcon(details.icon),
+    hidden: details.hidden === true,
     ownerId: details.ownerId,
     size: assertSize(details.size),
   };
@@ -104,6 +121,14 @@ export class Token {
 
   get kind(): TokenKind {
     return this.props.kind;
+  }
+
+  get icon(): TokenIcon | null {
+    return this.props.icon;
+  }
+
+  get hidden(): boolean {
+    return this.props.hidden;
   }
 
   get ownerId(): string | null {

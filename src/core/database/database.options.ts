@@ -6,6 +6,7 @@ import { DatabaseSslMode } from './database-ssl-mode';
 import { CreateUsers1762790400000 } from './migrations/1762790400000-create-users';
 import { CreateTokens1763337600000 } from './migrations/1763337600000-create-tokens';
 import { CreateChatMessages1763942400000 } from './migrations/1763942400000-create-chat-messages';
+import { AddTokenIconAndVisibility1764547200000 } from './migrations/1764547200000-add-token-icon-and-visibility';
 
 export interface DatabaseSettings {
   url: string;
@@ -39,6 +40,7 @@ export function buildDataSourceOptions(
       CreateUsers1762790400000,
       CreateTokens1763337600000,
       CreateChatMessages1763942400000,
+      AddTokenIconAndVisibility1764547200000,
     ],
     migrationsTableName: 'typeorm_migrations',
     uuidExtension: 'pgcrypto',

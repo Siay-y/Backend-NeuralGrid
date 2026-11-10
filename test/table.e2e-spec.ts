@@ -225,6 +225,67 @@ describe('Table gateway (e2e)', () => {
     expect(await otherSeesDeletion).toEqual({ id: tokenId });
   });
 
+  it('keeps hidden tokens between the masters until revealed', async () => {
+    const master = await open(sessions.mestre.token);
+    const player = await open(sessions.jogador1.token);
+    const playerEvents: string[] = [];
+    player.socket.onAny((event: string) => playerEvents.push(event));
+
+    const created = await send<TokenData & { hidden: boolean; icon: string }>(
+      master.socket,
+      'token:create',
+      {
+        label: 'Dragão',
+        kind: 'threat',
+        icon: 'dragon-head',
+        hidden: true,
+        ownerId: sessions.jogador1.userId,
+        col: 4,
+        row: 4,
+      },
+    );
+    expect(created.data).toMatchObject({ hidden: true, icon: 'dragon-head' });
+    const tokenId = created.data!.id;
+
+    const late = await open(sessions.jogador2.token);
+    expect(late.snapshot.tokens.some((token) => token.id === tokenId)).toBe(
+      false,
+    );
+    const masterAgain = await open(sessions.mestre.token);
+    expect(
+      masterAgain.snapshot.tokens.some((token) => token.id === tokenId),
+    ).toBe(true);
+
+    const peek = await send(player.socket, 'token:move', {
+      id: tokenId,
+      col: 0,
+      row: 0,
+    });
+    expect(peek.error?.code).toBe('TOKEN_NOT_FOUND');
+
+    const playerSeesReveal = next<TokenData>(player.socket, 'token:updated');
+    await send(master.socket, 'token:update', { id: tokenId, hidden: false });
+    expect(await playerSeesReveal).toMatchObject({
+      id: tokenId,
+      hidden: false,
+    });
+    expect(playerEvents.filter((event) => event.startsWith('token:'))).toEqual([
+      'token:updated',
+    ]);
+
+    const playerSeesHide = next<{ id: string }>(player.socket, 'token:deleted');
+    await send(master.socket, 'token:update', { id: tokenId, hidden: true });
+    expect(await playerSeesHide).toEqual({ id: tokenId });
+
+    const unknownIcon = await send(master.socket, 'token:update', {
+      id: tokenId,
+      icon: 'unicorn',
+    });
+    expect(unknownIcon.error?.code).toBe('INVALID_PAYLOAD');
+
+    await send(master.socket, 'token:delete', { id: tokenId });
+  });
+
   it('delivers chat and rolls only to who may see them', async () => {
     const master = await open(sessions.mestre.token);
     const player = await open(sessions.jogador1.token);

@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -17,6 +18,10 @@ import {
 } from '../../../domain/entities/token';
 import { GRID_LIMIT } from '../../../domain/value-objects/grid-position';
 import {
+  TOKEN_ICONS,
+  type TokenIcon,
+} from '../../../domain/value-objects/token-icon';
+import {
   TOKEN_KINDS,
   type TokenKind,
 } from '../../../domain/value-objects/token-kind';
@@ -29,6 +34,8 @@ const KIND_MESSAGE = 'O tipo precisa ser agente, NPC ou ameaça';
 const OWNER_MESSAGE = 'O dono precisa ser um usuário da mesa ou nulo';
 const SIZE_MESSAGE = `O tamanho precisa ser um inteiro entre ${TOKEN_MIN_SIZE} e ${TOKEN_MAX_SIZE}`;
 const POSITION_MESSAGE = `A posição precisa ser um inteiro entre -${GRID_LIMIT} e ${GRID_LIMIT}`;
+const ICON_MESSAGE = 'Ícone de token desconhecido';
+const HIDDEN_MESSAGE = 'A visibilidade precisa ser verdadeiro ou falso';
 const ID_MESSAGE = 'Identificador de token inválido';
 
 export class TokenIdDto {
@@ -56,6 +63,16 @@ export class CreateTokenDto {
 
   @IsIn(TOKEN_KINDS, { message: KIND_MESSAGE })
   kind: TokenKind;
+
+  @ValidateIf(
+    (dto: CreateTokenDto) => dto.icon !== null && dto.icon !== undefined,
+  )
+  @IsIn(TOKEN_ICONS, { message: ICON_MESSAGE })
+  icon?: TokenIcon | null;
+
+  @IsOptional()
+  @IsBoolean({ message: HIDDEN_MESSAGE })
+  hidden?: boolean;
 
   @IsOptional()
   @IsUUID('4', { message: OWNER_MESSAGE })
@@ -88,6 +105,16 @@ export class UpdateTokenDto extends TokenIdDto {
   @IsOptional()
   @IsIn(TOKEN_KINDS, { message: KIND_MESSAGE })
   kind?: TokenKind;
+
+  @ValidateIf(
+    (dto: UpdateTokenDto) => dto.icon !== null && dto.icon !== undefined,
+  )
+  @IsIn(TOKEN_ICONS, { message: ICON_MESSAGE })
+  icon?: TokenIcon | null;
+
+  @IsOptional()
+  @IsBoolean({ message: HIDDEN_MESSAGE })
+  hidden?: boolean;
 
   @ValidateIf(
     (dto: UpdateTokenDto) => dto.ownerId !== null && dto.ownerId !== undefined,

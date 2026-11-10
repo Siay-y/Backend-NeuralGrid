@@ -40,8 +40,8 @@ fire-and-forget.
 
 | Evento | Quem pode | Payload | Resposta |
 | --- | --- | --- | --- |
-| `token:create` | mestre | `{ label, kind, ownerId?, col, row, size? }` | token criado |
-| `token:update` | mestre | `{ id, label?, kind?, ownerId?, size? }` | token atualizado |
+| `token:create` | mestre | `{ label, kind, icon?, hidden?, ownerId?, col, row, size? }` | token criado |
+| `token:update` | mestre | `{ id, label?, kind?, icon?, hidden?, ownerId?, size? }` | token atualizado |
 | `token:move` | mestre ou dono | `{ id, col, row }` | token com `version` nova |
 | `token:drag` | mestre ou dono | `{ id, col, row }` | nenhuma |
 | `token:delete` | mestre | `{ id }` | `{ id }` |
@@ -56,7 +56,7 @@ fire-and-forget.
 | `table:snapshot` | logo após conectar ou reconectar | `{ you, tokens, members, online, messages }` |
 | `token:created` | alguém criou um token | token |
 | `token:updated` | alguém moveu ou editou | token |
-| `token:deleted` | o mestre removeu | `{ id }` |
+| `token:deleted` | o mestre removeu ou escondeu | `{ id }` |
 | `token:dragged` | alguém está arrastando | `{ id, by, col, row }` |
 | `presence:changed` | alguém entrou ou saiu | `{ online: string[] }` |
 | `session:expired` | o JWT venceu | nenhum |
@@ -86,6 +86,8 @@ saem do servidor.
 | --- | --- |
 | `kind` | `agent` (Agente), `npc` ou `threat` (Ameaça), na linguagem de Ordem Paranormal |
 | `label` | 1 a 32 caracteres, sem espaços nas pontas |
+| `icon` | um id da lista `TOKEN_ICONS` ou `null` (mostra as iniciais) |
+| `hidden` | `true` deixa o token só para o mestre |
 | `ownerId` | um usuário da mesa ou `null`; se o usuário for removido, vira `null` |
 | `col`, `row` | inteiros entre -500 e 500 |
 | `size` | 1 a 4 células por lado |
@@ -99,6 +101,23 @@ linha de defesa).
 jogador só os que têm o seu `ownerId`. A mesma regra vale para a prévia de
 arraste, que não grava nada mas também não deixa um jogador mexer, nem
 visualmente, no token de outro.
+
+**Tokens ocultos.** `TokenPolicy.canSee` decide quem enxerga cada token. O
+mestre vê todos; o jogador, só os que não estão ocultos. A regra vale em todo
+lugar:
+
+| Situação | Mestres | Jogadores |
+| --- | --- | --- |
+| Snapshot | todos os tokens | só os visíveis |
+| Criar oculto | `token:created` | nada |
+| Mover ou editar oculto | `token:updated` | nada |
+| Esconder um visível | `token:updated` | `token:deleted` |
+| Revelar | `token:updated` | `token:updated` com o token inteiro |
+| Remover oculto | `token:deleted` | nada |
+| Arrastar oculto | `token:dragged` | nada |
+
+Para o jogador, um token oculto não existe: mover ou arrastar responde
+`TOKEN_NOT_FOUND`, mesmo que ele seja o dono.
 
 **Versão.** O servidor é a fonte da verdade e o último movimento gravado vence.
 O campo `version` deixa o cliente descartar uma atualização mais velha que

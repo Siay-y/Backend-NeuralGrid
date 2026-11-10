@@ -15,6 +15,11 @@ export interface TokenDragPreview extends GridPosition {
   by: string;
 }
 
+export interface TokenDrag {
+  preview: TokenDragPreview;
+  hidden: boolean;
+}
+
 @Injectable()
 export class AuthorizeTokenDragUseCase {
   constructor(private readonly tokens: TokenRepository) {}
@@ -22,13 +27,16 @@ export class AuthorizeTokenDragUseCase {
   async execute(
     actor: TableActor,
     input: { id: string; col: number; row: number },
-  ): Promise<TokenDragPreview> {
+  ): Promise<TokenDrag> {
     const position = gridPosition(input.col, input.row);
     const token = await this.tokens.findById(input.id);
-    if (!token) {
+    if (!token || !TokenPolicy.canSee(actor, token)) {
       throw new TokenNotFoundError();
     }
     TokenPolicy.assertCanMove(actor, token);
-    return { id: token.id, by: actor.id, ...position };
+    return {
+      preview: { id: token.id, by: actor.id, ...position },
+      hidden: token.hidden,
+    };
   }
 }

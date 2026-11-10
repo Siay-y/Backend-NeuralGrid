@@ -5,6 +5,7 @@ import {
   TokenPolicy,
 } from '../../domain/policies/token-policy';
 import { TokenRepository } from '../../domain/repositories/token.repository';
+import type { TokenIcon } from '../../domain/value-objects/token-icon';
 import type { TokenKind } from '../../domain/value-objects/token-kind';
 import { toTokenView, TokenView } from '../dtos/token-view';
 import { TokenOwnerValidator } from '../services/token-owner-validator';
@@ -13,8 +14,15 @@ export interface UpdateTokenInput {
   id: string;
   label?: string;
   kind?: TokenKind;
+  icon?: TokenIcon | null;
+  hidden?: boolean;
   ownerId?: string | null;
   size?: number;
+}
+
+export interface TokenChange {
+  token: TokenView;
+  wasHidden: boolean;
 }
 
 @Injectable()
@@ -27,7 +35,7 @@ export class UpdateTokenUseCase {
   async execute(
     actor: TableActor,
     input: UpdateTokenInput,
-  ): Promise<TokenView> {
+  ): Promise<TokenChange> {
     TokenPolicy.assertCanManage(actor);
 
     const token = await this.tokens.findById(input.id);
@@ -44,12 +52,14 @@ export class UpdateTokenUseCase {
       {
         label: input.label ?? token.label,
         kind: input.kind ?? token.kind,
+        icon: input.icon === undefined ? token.icon : input.icon,
+        hidden: input.hidden ?? token.hidden,
         size: input.size ?? token.size,
         ownerId,
       },
       new Date(),
     );
     await this.tokens.save(updated);
-    return toTokenView(updated);
+    return { token: toTokenView(updated), wasHidden: token.hidden };
   }
 }

@@ -7,6 +7,8 @@ export const TokenMapper = {
       id: row.id,
       label: row.label,
       kind: row.kind,
+      icon: row.icon,
+      hidden: row.hidden,
       ownerId: row.ownerId,
       col: row.col,
       row: row.row,
@@ -22,6 +24,8 @@ export const TokenMapper = {
     row.id = token.id;
     row.label = token.label;
     row.kind = token.kind;
+    row.icon = token.icon;
+    row.hidden = token.hidden;
     row.ownerId = token.ownerId;
     row.col = token.col;
     row.row = token.row;
