@@ -19,7 +19,7 @@ export class MoveTokenUseCase {
 
   async execute(actor: TableActor, input: MoveTokenInput): Promise<TokenView> {
     const token = await this.tokens.findById(input.id);
-    if (!token) {
+    if (!token || !TokenPolicy.canSee(actor, token)) {
       throw new TokenNotFoundError();
     }
     TokenPolicy.assertCanMove(actor, token);

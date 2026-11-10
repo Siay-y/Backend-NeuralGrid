@@ -6,6 +6,7 @@ import {
   TokenPolicy,
 } from '../../domain/policies/token-policy';
 import { TokenRepository } from '../../domain/repositories/token.repository';
+import type { TokenIcon } from '../../domain/value-objects/token-icon';
 import type { TokenKind } from '../../domain/value-objects/token-kind';
 import { toTokenView, TokenView } from '../dtos/token-view';
 import { TokenOwnerValidator } from '../services/token-owner-validator';
@@ -13,6 +14,8 @@ import { TokenOwnerValidator } from '../services/token-owner-validator';
 export interface CreateTokenInput {
   label: string;
   kind: TokenKind;
+  icon: TokenIcon | null;
+  hidden: boolean;
   ownerId: string | null;
   col: number;
   row: number;

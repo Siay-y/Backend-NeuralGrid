@@ -124,7 +124,7 @@ export class TableGateway
 
     try {
       const [tokens, users, messages] = await Promise.all([
-        this.listTokens.execute(),
+        this.listTokens.execute({ id: user.id, role: user.role }),
         this.listUsers.execute(),
         this.listMessages.execute({ id: user.id, role: user.role }),
       ]);
@@ -172,12 +172,14 @@ export class TableGateway
       const token = await this.createToken.execute(actor, {
         label: dto.label,
         kind: dto.kind,
+        icon: dto.icon ?? null,
+        hidden: dto.hidden ?? false,
         ownerId: dto.ownerId ?? null,
         col: dto.col,
         row: dto.row,
         size: dto.size ?? 1,
       });
-      this.server.emit(TableServerEvent.TokenCreated, token);
+      this.publishToken(TableServerEvent.TokenCreated, token, true);
       return token;
     });
   }
@@ -189,8 +191,8 @@ export class TableGateway
   ): Promise<WsResult<TokenView>> {
     return this.run(socket, async (actor) => {
       const dto = await parsePayload(UpdateTokenDto, body);
-      const token = await this.updateToken.execute(actor, dto);
-      this.server.emit(TableServerEvent.TokenUpdated, token);
+      const { token, wasHidden } = await this.updateToken.execute(actor, dto);
+      this.publishToken(TableServerEvent.TokenUpdated, token, wasHidden);
       return token;
     });
   }
@@ -203,7 +205,7 @@ export class TableGateway
     return this.run(socket, async (actor) => {
       const dto = await parsePayload(TokenPositionDto, body);
       const token = await this.moveToken.execute(actor, dto);
-      this.server.emit(TableServerEvent.TokenUpdated, token);
+      this.publishToken(TableServerEvent.TokenUpdated, token, token.hidden);
       return token;
     });
   }
@@ -215,8 +217,9 @@ export class TableGateway
   ): Promise<WsResult<null>> {
     return this.run(socket, async (actor) => {
       const dto = await parsePayload(TokenPositionDto, body);
-      const preview = await this.authorizeDrag.execute(actor, dto);
-      socket.broadcast.emit(TableServerEvent.TokenDragged, preview);
+      const { preview, hidden } = await this.authorizeDrag.execute(actor, dto);
+      const audience = hidden ? socket.to(MASTERS_ROOM) : socket.broadcast;
+      audience.emit(TableServerEvent.TokenDragged, preview);
       return null;
     });
   }
@@ -228,9 +231,10 @@ export class TableGateway
   ): Promise<WsResult<{ id: string }>> {
     return this.run(socket, async (actor) => {
       const dto = await parsePayload(TokenIdDto, body);
-      const result = await this.deleteToken.execute(actor, dto.id);
-      this.server.emit(TableServerEvent.TokenDeleted, result);
-      return result;
+      const { id, wasHidden } = await this.deleteToken.execute(actor, dto.id);
+      const audience = wasHidden ? this.server.to(MASTERS_ROOM) : this.server;
+      audience.emit(TableServerEvent.TokenDeleted, { id });
+      return { id };
     });
   }
 
@@ -278,6 +282,20 @@ export class TableGateway
       this.server.emit(TableServerEvent.ChatCleared, cleared);
       return cleared;
     });
+  }
+
+  private publishToken(
+    event: string,
+    token: TokenView,
+    wasHidden: boolean,
+  ): void {
+    this.server.to(MASTERS_ROOM).emit(event, token);
+    const players = this.server.except(MASTERS_ROOM);
+    if (!token.hidden) {
+      players.emit(event, token);
+    } else if (!wasHidden) {
+      players.emit(TableServerEvent.TokenDeleted, { id: token.id });
+    }
   }
 
   private deliver(message: MessageView): void {

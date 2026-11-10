@@ -11,6 +11,7 @@ import { TokenOwnerValidator } from '../services/token-owner-validator';
 import { AuthorizeTokenDragUseCase } from './authorize-token-drag.use-case';
 import { CreateTokenUseCase } from './create-token.use-case';
 import { DeleteTokenUseCase } from './delete-token.use-case';
+import { ListTokensUseCase } from './list-tokens.use-case';
 import { MoveTokenUseCase } from './move-token.use-case';
 import { UpdateTokenUseCase } from './update-token.use-case';
 
@@ -21,6 +22,8 @@ const otherPlayer: TableActor = { id: 'player-2', role: 'player' };
 const agentInput = {
   label: 'Dante',
   kind: 'agent' as const,
+  icon: null,
+  hidden: false,
   ownerId: 'player-1',
   col: 0,
   row: 0,
@@ -34,6 +37,7 @@ describe('token use cases', () => {
   let move: MoveTokenUseCase;
   let drag: AuthorizeTokenDragUseCase;
   let remove: DeleteTokenUseCase;
+  let list: ListTokensUseCase;
 
   beforeEach(async () => {
     const users = new InMemoryUserRepository();
@@ -61,6 +65,7 @@ describe('token use cases', () => {
     move = new MoveTokenUseCase(tokens);
     drag = new AuthorizeTokenDragUseCase(tokens);
     remove = new DeleteTokenUseCase(tokens);
+    list = new ListTokensUseCase(tokens);
   });
 
   describe('create', () => {
@@ -132,10 +137,8 @@ describe('token use cases', () => {
       await expect(
         drag.execute(player, { id, col: 2, row: 2 }),
       ).resolves.toEqual({
-        id,
-        by: 'player-1',
-        col: 2,
-        row: 2,
+        preview: { id, by: 'player-1', col: 2, row: 2 },
+        hidden: false,
       });
       await expect(
         drag.execute(otherPlayer, { id, col: 2, row: 2 }),
@@ -155,9 +158,8 @@ describe('token use cases', () => {
       });
 
       expect(updated).toMatchObject({
-        ownerId: 'player-2',
-        size: 2,
-        label: 'Dante',
+        token: { ownerId: 'player-2', size: 2, label: 'Dante' },
+        wasHidden: false,
       });
     });
 
@@ -175,10 +177,84 @@ describe('token use cases', () => {
     it('removes a token for the master', async () => {
       const { id } = await create.execute(master, agentInput);
 
-      await expect(remove.execute(master, id)).resolves.toEqual({ id });
+      await expect(remove.execute(master, id)).resolves.toEqual({
+        id,
+        wasHidden: false,
+      });
       await expect(remove.execute(master, id)).rejects.toBeInstanceOf(
         TokenNotFoundError,
       );
+    });
+  });
+
+  describe('hidden tokens', () => {
+    it('lists them only for the master', async () => {
+      await create.execute(master, { ...agentInput, label: 'Visível' });
+      await create.execute(master, {
+        ...agentInput,
+        label: 'Dragão',
+        icon: 'dragon-head',
+        hidden: true,
+      });
+
+      const forMaster = await list.execute(master);
+      const forPlayer = await list.execute(player);
+
+      expect(forMaster.map((token) => token.label).sort()).toEqual([
+        'Dragão',
+        'Visível',
+      ]);
+      expect(forPlayer.map((token) => token.label)).toEqual(['Visível']);
+    });
+
+    it('treats a hidden token as missing for players, even its owner', async () => {
+      const { id } = await create.execute(master, {
+        ...agentInput,
+        hidden: true,
+      });
+
+      await expect(
+        move.execute(player, { id, col: 1, row: 1 }),
+      ).rejects.toBeInstanceOf(TokenNotFoundError);
+      await expect(
+        drag.execute(player, { id, col: 1, row: 1 }),
+      ).rejects.toBeInstanceOf(TokenNotFoundError);
+      await expect(
+        move.execute(master, { id, col: 1, row: 1 }),
+      ).resolves.toMatchObject({ hidden: true });
+    });
+
+    it('reports the previous visibility when the master reveals one', async () => {
+      const { id } = await create.execute(master, {
+        ...agentInput,
+        hidden: true,
+      });
+
+      const change = await update.execute(master, { id, hidden: false });
+
+      expect(change).toMatchObject({
+        token: { hidden: false },
+        wasHidden: true,
+      });
+      await expect(remove.execute(master, id)).resolves.toEqual({
+        id,
+        wasHidden: false,
+      });
+    });
+
+    it('swaps and clears the icon', async () => {
+      const { id } = await create.execute(master, {
+        ...agentInput,
+        icon: 'wolf-head',
+      });
+
+      const swapped = await update.execute(master, { id, icon: 'raven' });
+      const kept = await update.execute(master, { id, label: 'Corvo' });
+      const cleared = await update.execute(master, { id, icon: null });
+
+      expect(swapped.token.icon).toBe('raven');
+      expect(kept.token.icon).toBe('raven');
+      expect(cleared.token.icon).toBeNull();
     });
   });
 });

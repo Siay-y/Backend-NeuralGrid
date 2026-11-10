@@ -5,6 +5,8 @@ const base = {
   id: 'token-1',
   label: '  Arthur Cervero ',
   kind: 'agent' as const,
+  icon: null,
+  hidden: false,
   ownerId: 'player-1',
   col: 2,
   row: -3,
@@ -32,6 +34,7 @@ describe('Token', () => {
     ['an empty label', { label: '   ' }],
     ['a label longer than 32 characters', { label: 'x'.repeat(33) }],
     ['an unknown kind', { kind: 'dragon' as never }],
+    ['an unknown icon', { icon: 'unicorn' as never }],
     ['a size above 4', { size: 5 }],
     ['a fractional size', { size: 1.5 }],
     ['a position outside the grid', { col: 501 }],
@@ -40,6 +43,13 @@ describe('Token', () => {
     expect(() => Token.create({ ...base, ...override })).toThrow(
       InvalidTokenError,
     );
+  });
+
+  it('keeps a known icon and the hidden flag', () => {
+    const token = Token.create({ ...base, icon: 'dragon-head', hidden: true });
+
+    expect(token.icon).toBe('dragon-head');
+    expect(token.hidden).toBe(true);
   });
 
   it('validates moves against the grid limits', () => {

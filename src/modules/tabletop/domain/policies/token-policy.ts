@@ -12,8 +12,14 @@ export const TokenPolicy = {
     return actor.role === 'master';
   },
 
+  canSee(actor: TableActor, token: Token): boolean {
+    return actor.role === 'master' || !token.hidden;
+  },
+
   canMove(actor: TableActor, token: Token): boolean {
-    return actor.role === 'master' || token.isOwnedBy(actor.id);
+    return (
+      actor.role === 'master' || (!token.hidden && token.isOwnedBy(actor.id))
+    );
   },
 
   assertCanManage(actor: TableActor): void {

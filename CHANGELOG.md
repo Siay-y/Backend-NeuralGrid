@@ -6,6 +6,20 @@ do roadmap e o patch a cada melhoria ou correção. As notas para os jogadores
 ficam na aba Atualizações do
 [frontend](https://github.com/Siay-y/Frontend-NeuralGrid).
 
+## 0.3.1 (2026-11-10)
+
+Ícones e tokens ocultos.
+
+### Novo
+
+- Campo `icon` no token, validado contra uma lista fechada de ícones.
+- Campo `hidden`: o token só existe para o mestre até ser revelado. Jogadores
+  não o recebem no snapshot nem nos eventos, e mover ou arrastar um token oculto
+  responde `TOKEN_NOT_FOUND`, mesmo para o dono.
+- Ao esconder um token visível, os jogadores recebem `token:deleted`; ao
+  revelar, recebem `token:updated` com o token inteiro.
+- Migration `AddTokenIconAndVisibility`, aplicada sozinha no boot.
+
 ## 0.3.0 (2026-11-10)
 
 Dados e chat.
