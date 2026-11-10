@@ -1,0 +1,38 @@
+import type { DataSourceOptions } from 'typeorm';
+import { UserOrmEntity } from '../../modules/users/infrastructure/persistence/typeorm/entities/user.orm-entity';
+import { DatabaseSslMode } from './database-ssl-mode';
+import { CreateUsers1762790400000 } from './migrations/1762790400000-create-users';
+
+export interface DatabaseSettings {
+  url: string;
+  sslMode: DatabaseSslMode;
+}
+
+const SSL_BY_MODE = {
+  [DatabaseSslMode.Disable]: false,
+  [DatabaseSslMode.Require]: { rejectUnauthorized: false },
+  [DatabaseSslMode.Verify]: { rejectUnauthorized: true },
+} as const;
+
+// node-postgres lets `sslmode` in the URL override the explicit `ssl` option,
+// so it is stripped to keep DATABASE_SSL_MODE as the single source of truth.
+function withoutSslParameters(rawUrl: string): string {
+  const url = new URL(rawUrl);
+  url.searchParams.delete('sslmode');
+  url.searchParams.delete('ssl');
+  return url.toString();
+}
+
+export function buildDataSourceOptions(
+  settings: DatabaseSettings,
+): DataSourceOptions {
+  return {
+    type: 'postgres',
+    url: withoutSslParameters(settings.url),
+    ssl: SSL_BY_MODE[settings.sslMode],
+    entities: [UserOrmEntity],
+    migrations: [CreateUsers1762790400000],
+    migrationsTableName: 'typeorm_migrations',
+    synchronize: false,
+  };
+}

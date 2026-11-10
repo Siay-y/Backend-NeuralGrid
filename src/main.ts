@@ -1,10 +1,20 @@
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { AppModule, ObserveInstrument } from './app.module';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { AppModule } from './app.module';
+import { EnvService } from './core/config/env.service';
+import { API_PREFIX, configureHttp } from './core/http/configure-http';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-    instrument: ObserveInstrument,
-  });
-  await app.listen(process.env.PORT ?? 3000);
+async function bootstrap(): Promise<void> {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  configureHttp(app);
+
+  const port = app.get(EnvService).get('PORT');
+  await app.listen(port, '0.0.0.0');
+  Logger.log(
+    `NeuralGrid API ouvindo em http://localhost:${port}/${API_PREFIX}`,
+    'Bootstrap',
+  );
 }
+
 void bootstrap();

@@ -1,126 +1,260 @@
 <p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
+  <a href="https://nestjs.com/"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="NestJS" /></a>
 </p>
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+<h1 align="center">NeuralGrid API | Luiz Santos</h1>
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
+<p align="center">
+  <img src="https://img.shields.io/badge/NestJS-12.4-E0234E?style=for-the-badge&logo=nestjs&logoColor=white" alt="NestJS 12.4" />
+  <img src="https://img.shields.io/badge/Node.js-24.18-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js 24.18" />
+  <img src="https://img.shields.io/badge/TypeScript-6.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 6.0" />
+  <br />
+  <img src="https://img.shields.io/badge/PostgreSQL-18-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL 18" />
+  <img src="https://img.shields.io/badge/TypeORM-1.1-FE0803?style=for-the-badge&logo=typeorm&logoColor=white" alt="TypeORM 1.1" />
+  <img src="https://img.shields.io/badge/Argon2id-0.45-000000?style=for-the-badge&logoColor=white" alt="Argon2id 0.45" />
+  <br />
+  <img src="https://img.shields.io/badge/JWT-12.0-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white" alt="JWT 12.0" />
+  <img src="https://img.shields.io/badge/Passport-12.0-34E27A?style=for-the-badge&logo=passport&logoColor=white" alt="Passport 12.0" />
+  <img src="https://img.shields.io/badge/Throttler-6.7-E0234E?style=for-the-badge&logo=nestjs&logoColor=white" alt="Throttler 6.7" />
+  <br />
+  <img src="https://img.shields.io/badge/Jest-30.5-C21325?style=for-the-badge&logo=jest&logoColor=white" alt="Jest 30.5" />
+  <img src="https://img.shields.io/badge/Oxlint-1.93-00F7F1?style=for-the-badge&logo=oxc&logoColor=white" alt="Oxlint 1.93" />
+  <img src="https://img.shields.io/badge/Prettier-3.9-F7B93E?style=for-the-badge&logo=prettier&logoColor=white" alt="Prettier 3.9" />
+  <img src="https://img.shields.io/badge/Render-deploy-000000?style=for-the-badge&logo=render&logoColor=white" alt="Publicado no Render" />
 </p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
-## Description
+API do NeuralGrid, um Virtual Tabletop privado para uma mesa de quatro pessoas:
+o mestre e três jogadores. Construída em NestJS 12, cuida da autenticação, da
+mesa em tempo real e das fichas dos personagens.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Não existe cadastro público nem recuperação de senha. As contas nascem por um
+script de seed, e a segurança está presente desde o primeiro commit: hash
+Argon2id, JWT assinado, limite de tentativas por IP e por conta e rotas
+fechadas por padrão.
 
-## Project setup
+O cliente Angular vive em
+[Frontend-NeuralGrid](https://github.com/Siay-y/Frontend-NeuralGrid).
 
-```bash
-$ npm install
+---
+
+## Visão geral
+
+| Característica | Implementação |
+| --- | --- |
+| Arquitetura | Clean Architecture por módulo, domínio isolado de framework e banco |
+| Autenticação | JWT HS256 com `iss` e `aud` fixos, validado por Passport e `JwtStrategy` |
+| Senhas | Argon2id com os parâmetros mínimos da OWASP (19 MiB, 2 iterações) |
+| Força bruta | Throttler com três limites: global, por IP no login e por conta no login |
+| Autorização | Guard global fail-closed, `@Public()` explícito e `@Roles('master', 'player')` |
+| Validação | DTOs com `class-validator`, campos desconhecidos rejeitados com `400` |
+| Erros | Filtro global com corpo único `{ statusCode, error, message }` |
+| Banco | PostgreSQL com migrations versionadas, regras repetidas em `CHECK` |
+
+---
+
+## Funcionalidades
+
+- **Login que não entrega nada de graça.** Usuário inexistente e senha errada
+  respondem a mesma mensagem, no mesmo tempo: quando a conta não existe, a API
+  ainda verifica um hash fictício para não denunciar quais nomes são válidos.
+- **Força bruta bloqueada em duas frentes.** Um IP que erra dez vezes em dez
+  minutos fica 15 minutos bloqueado. Uma conta que recebe cinco tentativas em
+  15 minutos também, mesmo vindas de IPs diferentes. A resposta `429` traz o
+  cabeçalho `Retry-After` com os segundos restantes.
+- **Token que se invalida sozinho.** O JWT carrega `id`, `username` e `role`, e
+  cada requisição confere esses dados contra o banco. Remover uma conta ou mudar
+  o papel de alguém derruba os tokens emitidos antes da mudança.
+- **Toda rota nasce protegida.** O guard JWT é global. Para abrir uma rota é
+  preciso marcá-la com `@Public()`, de propósito.
+- **Seed sem senha no repositório.** O script gera senhas aleatórias de 24
+  caracteres, grava apenas o hash e mostra cada senha uma única vez no terminal.
+- **Pronto para WebSockets.** Os guards leem o usuário pelo tipo de contexto
+  (`http` ou `ws`), e a resolução da sessão é um caso de uso independente de
+  transporte. A Etapa 2 pluga o gateway sem reescrever a autenticação.
+
+---
+
+## Arquitetura
+
+Cada módulo de negócio tem suas camadas: `domain` (regras puras, sem NestJS),
+`application` (casos de uso e portas), `infrastructure` (TypeORM, Argon2, JWT) e
+`presentation` (controllers, DTOs, guards). O que é transversal ao framework
+fica em `core/`, e os blocos reutilizáveis entre módulos em `shared/`.
+
+```text
+src/
+├── main.ts                       bootstrap HTTP
+├── app.module.ts                 raiz de composição: módulos, guards e filtro globais
+├── core/
+│   ├── config/                   validação do ambiente e EnvService tipado
+│   ├── database/                 opções do TypeORM, migrations e seed
+│   ├── health/                   GET /api/health
+│   ├── http/                     Helmet, CORS, proxy, body limit e ValidationPipe
+│   └── security/                 throttlers e guard que emite Retry-After
+├── shared/
+│   ├── domain/errors/            DomainError: base de todo erro de negócio
+│   └── presentation/http/        @Public() e filtro global de exceções
+└── modules/
+    ├── users/                    identidade, credenciais e hash de senha
+    └── auth/                     login, emissão de JWT, strategy e guards
 ```
 
-## Compile and run the project
+A árvore completa, a regra de dependência entre camadas e como criar um novo
+módulo estão em [docs/arquitetura.md](docs/arquitetura.md).
+
+---
+
+## Variáveis de ambiente
+
+Toda a configuração vem de variáveis de ambiente, descritas em
+[`.env.example`](.env.example) e validadas no boot. Se algo estiver errado, a API
+não sobe e lista cada problema.
+
+| Variável | Obrigatória | Padrão | Descrição |
+| --- | --- | --- | --- |
+| `NODE_ENV` | Não | `development` | `development`, `test` ou `production` |
+| `PORT` | Não | `3000` | Porta HTTP. O Render injeta a dele |
+| `CORS_ORIGINS` | Sim | | Origens aceitas, separadas por vírgula, no formato `protocolo://host[:porta]` |
+| `TRUST_PROXY_HOPS` | Não | `0` | Quantos proxies confiáveis existem na frente da API. Use `1` no Render |
+| `DATABASE_URL` | Sim | | URL `postgres://` do banco |
+| `DATABASE_SSL_MODE` | Não | `verify` | `disable`, `require` (cifra sem validar a CA) ou `verify` (cifra e valida) |
+| `JWT_SECRET` | Sim | | Segredo de assinatura, no mínimo 32 caracteres |
+| `JWT_EXPIRES_IN` | Não | `8h` | Validade do token: `30m`, `8h`, `1d` |
+| `JWT_ISSUER` | Não | `neuralgrid-api` | Valor de `iss` emitido e exigido |
+| `JWT_AUDIENCE` | Não | `neuralgrid-web` | Valor de `aud` emitido e exigido |
+| `SEED_USERS` | Só no seed | | Contas da mesa, no formato `usuario:Nome:papel`, separadas por vírgula |
+
+Gere o `JWT_SECRET` com:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
 ```
 
-## Run tests
+O parâmetro `sslmode` da `DATABASE_URL` é descartado de propósito: quem decide o
+TLS é `DATABASE_SSL_MODE`, para a URL copiada do painel do Neon ou do Supabase
+não sobrescrever a configuração em silêncio.
+
+---
+
+## Execução local
+
+Requer Node.js 24.18 ou superior e Docker com Docker Compose v2.
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+git clone https://github.com/Siay-y/Backend-NeuralGrid.git
+cd Backend-NeuralGrid
+npm ci
+cp .env.example .env
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Preencha o `JWT_SECRET` no `.env` e ajuste `SEED_USERS` com os nomes da mesa.
+Depois suba o banco, crie as contas e inicie a API:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm run db:up
+npm run seed
+npm run start:dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+O seed imprime uma tabela com a senha de cada conta. Ela não fica gravada em
+lugar nenhum, então entregue cada uma por um canal privado. Rodar o seed de
+novo mantém as contas existentes; `npm run seed:reset` gera senhas novas.
 
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-This project is already instrumented. To connect it, run this and approve the code it prints at [observe.nestjs.com/link](https://observe.nestjs.com/link) - signing up for free if you have no account:
+A API responde em `http://localhost:3000/api`:
 
 ```bash
-$ npx @nestjs/observe link
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"mestre","password":"<senha do seed>"}'
 ```
 
-It writes the app key and secret into `.env` and makes every `nest start` script (`start`, `start:dev`, `start:debug`) load it. In production, set `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment instead.
+> **Sem Docker?** Qualquer PostgreSQL 14 ou superior serve. Aponte a
+> `DATABASE_URL` para ele e mantenha `DATABASE_SSL_MODE=disable` se a conexão
+> for local.
 
-Or do it by hand: create an application and an API key at [observe.nestjs.com](https://observe.nestjs.com), and set the pair as `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment the app runs in.
+---
 
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
+## Scripts
 
-## Resources
+| Comando | Descrição |
+| --- | --- |
+| `npm run dev` | Sobe o banco e inicia a API em modo observador |
+| `npm run start:dev` | Só a API em modo observador |
+| `npm run db:up` / `db:down` | Sobe ou derruba o PostgreSQL do Docker Compose |
+| `npm run seed` | Cria as contas de `SEED_USERS` que ainda não existem |
+| `npm run seed:reset` | Gera senhas novas para todas as contas de `SEED_USERS` |
+| `npm run migration:run` | Aplica as migrations pendentes |
+| `npm run migration:generate -- src/core/database/migrations/Nome` | Gera uma migration a partir das entidades |
+| `npm test` | Testes unitários |
+| `npm run test:e2e` | Testes de ponta a ponta contra o banco `neuralgrid_test` |
+| `npm run lint` | Oxlint com checagem de tipos |
+| `npm run build` | Compila para `dist/` |
 
-Check out a few resources that may come in handy when working with NestJS:
+A API aplica as migrations pendentes sozinha ao iniciar, então o deploy não
+depende de um passo manual.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+---
 
-## Support
+## Deploy no Render
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+O banco fica no [Neon](https://neon.tech) ou no [Supabase](https://supabase.com),
+e a API num Web Service do Render.
 
-## Stay in touch
+1. Crie o banco e copie a connection string. No Supabase, use a do **Session
+   pooler** (porta 5432): o Transaction pooler não mantém sessão e quebra as
+   migrations.
+2. No Render, crie um **Web Service** apontando para este repositório.
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+   | Configuração | Valor |
+   | --- | --- |
+   | Runtime | Node |
+   | Build Command | `npm ci --include=dev && npm run build` |
+   | Start Command | `npm run start:prod` |
+   | Health Check Path | `/api/health` |
 
-## License
+3. Em **Environment**, defina:
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+   | Variável | Valor |
+   | --- | --- |
+   | `NODE_ENV` | `production` |
+   | `NODE_VERSION` | `24.18.0` |
+   | `DATABASE_URL` | a connection string do passo 1 |
+   | `DATABASE_SSL_MODE` | `verify` no Neon, `require` no Supabase |
+   | `JWT_SECRET` | um valor novo, gerado pelo comando acima |
+   | `CORS_ORIGINS` | a URL do Firebase Hosting, por exemplo `https://neuralgrid.web.app` |
+   | `TRUST_PROXY_HOPS` | `1` |
+
+4. Crie as contas a partir da sua máquina, apontando para o banco de produção:
+
+   ```bash
+   DATABASE_URL="<url de produção>" DATABASE_SSL_MODE=verify npm run seed
+   ```
+
+O plano gratuito do Render hiberna o serviço depois de 15 minutos sem tráfego,
+e a primeira requisição seguinte leva até um minuto. O frontend avisa o jogador
+quando o login demora por esse motivo. O passo a passo com as armadilhas de cada
+provedor está em [docs/deploy.md](docs/deploy.md).
+
+---
+
+## Documentação
+
+- [Arquitetura](docs/arquitetura.md): camadas, regra de dependência e como criar um módulo.
+- [Autenticação e segurança](docs/autenticacao.md): fluxo de login, JWT, throttling, guards e o caminho para WebSockets.
+- [Deploy](docs/deploy.md): Render, Neon, Supabase e rotação de segredos.
+
+---
+
+## Licença
+
+Distribuído sob a licença MIT. Consulte o arquivo [LICENSE](LICENSE).
+
+Copyright © 2026 Luiz Henrique Porfírio Santos.
+
+---
+
+## Contato
+
+- GitHub: [@Siay-y](https://github.com/Siay-y)
+- LinkedIn: [Luiz Henrique Porfírio Santos](https://www.linkedin.com/in/luiz-henrique-porf%C3%ADrio-santos-a8b77229a/)
+- E-mail: luiz.porfiriosantos@gmail.com
