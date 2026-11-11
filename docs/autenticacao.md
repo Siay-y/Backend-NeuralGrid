@@ -46,22 +46,24 @@ limita o tamanho máximo, para um corpo gigante não virar trabalho de hash.
 
 ## Proteção contra força bruta
 
-Configurada em `src/core/security/throttler.options.ts`:
+Dois limites protegem o login:
 
-| Throttler | Alcance | Limite | Bloqueio | Chave |
-| --- | --- | --- | --- | --- |
-| `default` | todas as rotas | 120 por minuto | 1 minuto | IP |
-| `login-ip` | rotas com `@BruteForceProtected()` | 10 em 10 minutos | 15 minutos | IP |
-| `login-account` | rotas com `@BruteForceProtected()` | 5 em 15 minutos | 15 minutos | nome de usuário |
+| Limite | Onde | Regra | Bloqueio |
+| --- | --- | --- | --- |
+| `default` | `throttler.options.ts`, todas as rotas | 120 por minuto por IP | 1 minuto |
+| `login-ip` | `throttler.options.ts`, rotas com `@BruteForceProtected()` | 10 tentativas em 10 minutos por IP | 15 minutos |
+| Por conta | `login-attempt-limiter.ts`, no `AuthController` | 5 erros na conta em 15 minutos | só os IPs que erraram |
 
 O limite por IP para um atacante numa única máquina. O limite por conta para o
-ataque distribuído, em que cada tentativa vem de um IP diferente. A chave da
-conta é lida do corpo cru, porque guards rodam antes dos pipes, e normalizada do
-mesmo jeito que o DTO faz.
+ataque distribuído e segue três regras:
 
-O lado ruim do limite por conta é conhecido: alguém que saiba o nome de usuário
-do mestre consegue bloqueá-lo por 15 minutos. Numa mesa privada de quatro
-pessoas, com nomes que não aparecem em lugar público, a troca vale a pena.
+- Só erro de senha conta. Login certo nunca soma, então abrir várias abas não
+  bloqueia ninguém, e um login certo apaga os erros daquele IP.
+- Quando a conta junta 5 erros em 15 minutos, cada IP que errou nela fica
+  bloqueado até 15 minutos depois do próprio último erro.
+- Um IP sem erros continua entrando. Quem souber o nome de usuário do mestre
+  não consegue mais trancá-lo para fora, e um ataque distribuído fica com um
+  palpite por IP.
 
 `req.ip` só é confiável com `TRUST_PROXY_HOPS` certo. Com `0` atrás do Render,
 todos os jogadores pareceriam vir do mesmo IP do balanceador. Com um número
@@ -125,6 +127,10 @@ O Socket.io usa o mesmo JWT, validado uma vez no handshake:
   transporte; o `AppThrottlerGuard` só atua em HTTP, e o socket tem um limite de
   taxa próprio.
 - O socket é derrubado no instante em que o token expira.
+- Cada conta abre no máximo 5 conexões ao mesmo tempo
+  (`MAX_CONNECTIONS_PER_USER`). A sexta recebe `session:limit` e é derrubada,
+  o que impede uma conta, ou um token vazado, de esgotar a memória do servidor
+  abrindo centenas de conexões.
 
 Os detalhes do protocolo estão em [Tempo real](tempo-real.md).
 

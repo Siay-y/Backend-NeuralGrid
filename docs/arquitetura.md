@@ -27,7 +27,7 @@ backend-neural-grid/
     │   │   ├── data-source.ts         DataSource da CLI do TypeORM
     │   │   ├── migrations/
     │   │   └── seeds/seed-users.ts    provisionamento das contas da mesa
-    │   ├── health/                    GET /api/health
+    │   ├── health/                    GET /api/health e /api/health/db
     │   ├── http/configure-http.ts     Helmet, CORS, proxy, body limit, pipes
     │   ├── realtime/                  AppSocketIoAdapter e configureRealtime
     │   └── security/                  throttlers e @BruteForceProtected()

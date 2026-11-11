@@ -9,6 +9,7 @@ import { AppModule } from '../src/app.module';
 import { configureHttp } from '../src/core/http/configure-http';
 import { configureRealtime } from '../src/core/realtime/configure-realtime';
 import { ProvisionUserUseCase } from '../src/modules/users/application/use-cases/provision-user.use-case';
+import { MAX_CONNECTIONS_PER_USER } from '../src/modules/tabletop/presentation/ws/table.gateway';
 
 const ALLOWED_ORIGIN = 'http://localhost:4200';
 const PASSWORD = 'senha-longa-para-testes-e2e';
@@ -168,6 +169,25 @@ describe('Table gateway (e2e)', () => {
     await expect(
       open(sessions.mestre.token, 'https://evil.example'),
     ).rejects.toBeDefined();
+  });
+
+  it('caps how many connections one account can hold', async () => {
+    for (let tab = 0; tab < MAX_CONNECTIONS_PER_USER; tab++) {
+      await open(sessions.jogador2.token);
+    }
+
+    const extra = io(`${baseUrl}/table`, {
+      transports: ['websocket'],
+      auth: { token: sessions.jogador2.token },
+      extraHeaders: { Origin: ALLOWED_ORIGIN },
+      reconnection: false,
+      forceNew: true,
+    });
+    sockets.push(extra);
+    const limit = await next<{ limit: number }>(extra, 'session:limit');
+    expect(limit.limit).toBe(MAX_CONNECTIONS_PER_USER);
+    await next(extra, 'disconnect');
+    expect(extra.connected).toBe(false);
   });
 
   it('sends a snapshot with members but no credentials', async () => {

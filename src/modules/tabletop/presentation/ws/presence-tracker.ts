@@ -24,6 +24,10 @@ export class PresenceTracker {
     return true;
   }
 
+  connectionCount(userId: string): number {
+    return this.socketsByUser.get(userId)?.size ?? 0;
+  }
+
   onlineUserIds(): string[] {
     return [...this.socketsByUser.keys()];
   }
