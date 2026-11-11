@@ -21,6 +21,14 @@ import { ListRecentMessagesUseCase } from '../../../chat/application/use-cases/l
 import { RollDiceUseCase } from '../../../chat/application/use-cases/roll-dice.use-case';
 import { SendMessageUseCase } from '../../../chat/application/use-cases/send-message.use-case';
 import { AuthenticateAccessTokenUseCase } from '../../../auth/application/use-cases/authenticate-access-token.use-case';
+import type { SheetView } from '../../../sheets/application/dtos/sheet-view';
+import {
+  CreateSheetUseCase,
+  DeleteSheetUseCase,
+  ListSheetsUseCase,
+  type SheetRemoval,
+  UpdateSheetUseCase,
+} from '../../../sheets/application/use-cases/sheet-use-cases';
 import { ListUsersUseCase } from '../../../users/application/use-cases/list-users.use-case';
 import {
   type DrawingsErased,
@@ -40,6 +48,7 @@ import { CreateTokenUseCase } from '../../application/use-cases/create-token.use
 import { DeleteTokenUseCase } from '../../application/use-cases/delete-token.use-case';
 import { ListTokensUseCase } from '../../application/use-cases/list-tokens.use-case';
 import { MoveTokenUseCase } from '../../application/use-cases/move-token.use-case';
+import { SyncSheetTokensUseCase } from '../../application/use-cases/sync-sheet-tokens.use-case';
 import { UpdateTokenUseCase } from '../../application/use-cases/update-token.use-case';
 import type { TableActor } from '../../domain/policies/token-policy';
 import { RollDiceDto, SendMessageDto } from './dtos/chat.dtos';
@@ -49,6 +58,7 @@ import {
   DrawingIdsDto,
   RulerDto,
 } from './dtos/drawing.dtos';
+import { CreateSheetDto, SheetIdDto, UpdateSheetDto } from './dtos/sheet.dtos';
 import {
   CreateTokenDto,
   TokenIdDto,
@@ -117,6 +127,11 @@ export class TableGateway
     private readonly createDrawing: CreateDrawingUseCase,
     private readonly eraseDrawings: EraseDrawingsUseCase,
     private readonly clearDrawings: ClearDrawingsUseCase,
+    private readonly listSheets: ListSheetsUseCase,
+    private readonly createSheet: CreateSheetUseCase,
+    private readonly updateSheet: UpdateSheetUseCase,
+    private readonly deleteSheet: DeleteSheetUseCase,
+    private readonly syncSheetTokens: SyncSheetTokensUseCase,
   ) {}
 
   afterInit(namespace: Namespace): void {
@@ -152,11 +167,13 @@ export class TableGateway
     );
 
     try {
-      const [tokens, users, messages, drawings] = await Promise.all([
-        this.listTokens.execute({ id: user.id, role: user.role }),
+      const actor = { id: user.id, role: user.role };
+      const [tokens, users, messages, drawings, sheets] = await Promise.all([
+        this.listTokens.execute(actor),
         this.listUsers.execute(),
-        this.listMessages.execute({ id: user.id, role: user.role }),
+        this.listMessages.execute(actor),
         this.listDrawings.execute(),
+        this.listSheets.execute(actor),
       ]);
       socket.emit(TableServerEvent.Snapshot, {
         you: user,
@@ -169,6 +186,7 @@ export class TableGateway
         online: this.presence.onlineUserIds(),
         messages,
         drawings,
+        sheets,
       });
     } catch (error) {
       this.logger.error(error instanceof Error ? error.stack : String(error));
@@ -208,6 +226,7 @@ export class TableGateway
         hidden: dto.hidden ?? false,
         nameHidden: dto.nameHidden ?? false,
         ownerId: dto.ownerId ?? null,
+        sheetId: dto.sheetId ?? null,
         col: dto.col,
         row: dto.row,
         size: dto.size ?? 1,
@@ -384,6 +403,71 @@ export class TableGateway
       socket.broadcast.emit(TableServerEvent.RulerCleared, { by: actor.id });
       return Promise.resolve(null);
     });
+  }
+
+  @SubscribeMessage(TableClientEvent.CreateSheet)
+  newSheet(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<SheetView>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(CreateSheetDto, body);
+      const sheet = await this.createSheet.execute(actor, dto);
+      this.sheetAudience(sheet.ownerId).emit(
+        TableServerEvent.SheetCreated,
+        sheet,
+      );
+      return sheet;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.UpdateSheet)
+  editSheet(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<SheetView>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(UpdateSheetDto, body);
+      const { sheet, previousOwnerId, identityChanged } =
+        await this.updateSheet.execute(actor, dto);
+      if (previousOwnerId !== null && previousOwnerId !== sheet.ownerId) {
+        this.server
+          .to(userRoom(previousOwnerId))
+          .except(MASTERS_ROOM)
+          .emit(TableServerEvent.SheetDeleted, { id: sheet.id });
+      }
+      this.sheetAudience(sheet.ownerId).emit(
+        TableServerEvent.SheetUpdated,
+        sheet,
+      );
+      if (identityChanged) {
+        for (const token of await this.syncSheetTokens.execute(sheet)) {
+          this.publishToken(TableServerEvent.TokenUpdated, token, token.hidden);
+        }
+      }
+      return sheet;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.DeleteSheet)
+  removeSheet(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<SheetRemoval>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(SheetIdDto, body);
+      const removal = await this.deleteSheet.execute(actor, dto.id);
+      this.sheetAudience(removal.ownerId).emit(TableServerEvent.SheetDeleted, {
+        id: removal.id,
+      });
+      return removal;
+    });
+  }
+
+  private sheetAudience(ownerId: string | null) {
+    return this.server.to(
+      ownerId === null ? [MASTERS_ROOM] : [MASTERS_ROOM, userRoom(ownerId)],
+    );
   }
 
   private assertCooldown(actor: TableActor, action: CooldownAction): void {

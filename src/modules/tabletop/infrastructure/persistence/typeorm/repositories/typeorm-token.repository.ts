@@ -25,6 +25,11 @@ export class TypeOrmTokenRepository extends TokenRepository {
     return row ? TokenMapper.toDomain(row) : null;
   }
 
+  async findBySheet(sheetId: string): Promise<Token[]> {
+    const rows = await this.rows.findBy({ sheetId });
+    return rows.map((row) => TokenMapper.toDomain(row));
+  }
+
   async save(token: Token): Promise<void> {
     await this.rows.save(TokenMapper.toOrm(token));
   }

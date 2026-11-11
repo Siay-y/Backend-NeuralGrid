@@ -20,6 +20,17 @@ interface Snapshot {
   online: string[];
   messages: MessageData[];
   drawings: DrawingData[];
+  sheets: SheetData[];
+}
+
+interface SheetData {
+  id: string;
+  ownerId: string | null;
+  kind: string;
+  data: {
+    identity: { name: string };
+    status: { hp: { current: number; max: number } };
+  };
 }
 
 interface DrawingData {
@@ -630,6 +641,108 @@ describe('Table gateway (e2e)', () => {
     expect(
       results.some((result) => result.error?.code === 'RATE_LIMITED'),
     ).toBe(true);
+  });
+
+  it('keeps sheets between their owner and the master, and links tokens to them', async () => {
+    const master = await open(sessions.mestre.token);
+    const player = await open(sessions.jogador1.token);
+    const other = await open(sessions.jogador2.token);
+    const otherEvents: string[] = [];
+    other.socket.onAny((event: string) => otherEvents.push(event));
+
+    const masterSeesSheet = next<SheetData>(master.socket, 'sheet:created');
+    const created = await send<SheetData>(player.socket, 'sheet:create', {
+      data: {
+        identity: { name: 'Kian', className: 'Espadachim' },
+        attributes: { strength: 14 },
+        skills: { arcana: 2 },
+      },
+    });
+    expect(created.data).toMatchObject({
+      ownerId: sessions.jogador1.userId,
+      kind: 'agent',
+      data: {
+        identity: { name: 'Kian', className: 'Espadachim' },
+        attributes: { strength: 14 },
+        skills: { arcana: 2 },
+      },
+    });
+    const sheetId = created.data!.id;
+    expect((await masterSeesSheet).id).toBe(sheetId);
+
+    const playerSeesDamage = next<SheetData>(player.socket, 'sheet:updated');
+    await send(master.socket, 'sheet:update', {
+      id: sheetId,
+      data: { status: { hp: { current: 4, max: 20 } } },
+    });
+    expect((await playerSeesDamage).data.status.hp).toEqual({
+      current: 4,
+      max: 20,
+    });
+
+    const peek = await send(other.socket, 'sheet:update', {
+      id: sheetId,
+      data: { goal: 'espiar' },
+    });
+    expect(peek.error?.code).toBe('SHEET_NOT_FOUND');
+    const late = await open(sessions.jogador2.token);
+    expect(late.snapshot.sheets).toEqual([]);
+    const rejoined = await open(sessions.jogador1.token);
+    expect(rejoined.snapshot.sheets.map((sheet) => sheet.id)).toEqual([
+      sheetId,
+    ]);
+
+    const token = await send<TokenData & { sheetId: string }>(
+      master.socket,
+      'token:create',
+      {
+        label: 'Kian',
+        kind: 'agent',
+        ownerId: sessions.jogador1.userId,
+        sheetId,
+        col: 9,
+        row: 9,
+      },
+    );
+    expect(token.data?.sheetId).toBe(sheetId);
+
+    const otherSeesRename = next<TokenData>(other.socket, 'token:updated');
+    await send(player.socket, 'sheet:update', {
+      id: sheetId,
+      data: { identity: { name: 'Kian', codename: 'Corvo' } },
+    });
+    expect(await otherSeesRename).toMatchObject({
+      id: token.data!.id,
+      label: 'Corvo',
+    });
+
+    const ghost = await send(master.socket, 'token:create', {
+      label: 'Fantasma',
+      kind: 'npc',
+      sheetId: '00000000-0000-4000-8000-000000000000',
+      col: 9,
+      row: 10,
+    });
+    expect(ghost.error?.code).toBe('INVALID_TOKEN');
+
+    const playerSeesRemoval = next<{ id: string }>(
+      player.socket,
+      'sheet:deleted',
+    );
+    expect(
+      (await send(master.socket, 'sheet:delete', { id: sheetId })).ok,
+    ).toBe(true);
+    expect(await playerSeesRemoval).toEqual({ id: sheetId });
+    const afterDelete = await open(sessions.mestre.token);
+    const linked = afterDelete.snapshot.tokens.find(
+      (item) => item.id === token.data!.id,
+    ) as { sheetId?: string | null } | undefined;
+    expect(linked?.sheetId).toBeNull();
+    expect(otherEvents.filter((event) => event.startsWith('sheet:'))).toEqual(
+      [],
+    );
+
+    await send(master.socket, 'token:delete', { id: token.data!.id });
   });
 
   it('makes spammers wait before sending or rolling again', async () => {

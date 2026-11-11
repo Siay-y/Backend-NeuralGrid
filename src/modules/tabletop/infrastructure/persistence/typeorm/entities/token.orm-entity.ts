@@ -63,6 +63,10 @@ export class TokenOrmEntity {
   @JoinColumn({ name: 'owner_id', foreignKeyConstraintName: 'fk_tokens_owner' })
   owner?: UserOrmEntity | null;
 
+  @Index('ix_tokens_sheet_id')
+  @Column({ name: 'sheet_id', type: 'uuid', nullable: true })
+  sheetId: string | null;
+
   @Column({ type: 'integer' })
   col: number;
 

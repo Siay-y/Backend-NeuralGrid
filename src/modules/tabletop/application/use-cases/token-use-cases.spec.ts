@@ -7,12 +7,18 @@ import { TokenForbiddenError } from '../../domain/errors/token-forbidden.error';
 import { TokenNotFoundError } from '../../domain/errors/token-not-found.error';
 import type { TableActor } from '../../domain/policies/token-policy';
 import { InMemoryTokenRepository } from '../../testing/in-memory-token.repository';
+import { toSheetView } from '../../../sheets/application/dtos/sheet-view';
+import { FindSheetUseCase } from '../../../sheets/application/use-cases/sheet-use-cases';
+import { CharacterSheet } from '../../../sheets/domain/entities/character-sheet';
+import { InMemorySheetRepository } from '../../../sheets/testing/in-memory-sheet.repository';
 import { TokenOwnerValidator } from '../services/token-owner-validator';
+import { TokenSheetLink } from '../services/token-sheet-link';
 import { AuthorizeTokenDragUseCase } from './authorize-token-drag.use-case';
 import { CreateTokenUseCase } from './create-token.use-case';
 import { DeleteTokenUseCase } from './delete-token.use-case';
 import { ListTokensUseCase } from './list-tokens.use-case';
 import { MoveTokenUseCase } from './move-token.use-case';
+import { SyncSheetTokensUseCase } from './sync-sheet-tokens.use-case';
 import { UpdateTokenUseCase } from './update-token.use-case';
 
 const master: TableActor = { id: 'master-1', role: 'master' };
@@ -27,6 +33,7 @@ const agentInput = {
   hidden: false,
   nameHidden: false,
   ownerId: 'player-1',
+  sheetId: null,
   col: 0,
   row: 0,
   size: 1,
@@ -40,6 +47,8 @@ describe('token use cases', () => {
   let drag: AuthorizeTokenDragUseCase;
   let remove: DeleteTokenUseCase;
   let list: ListTokensUseCase;
+  let sheetStore: InMemorySheetRepository;
+  let sync: SyncSheetTokensUseCase;
 
   beforeEach(async () => {
     const users = new InMemoryUserRepository();
@@ -62,8 +71,11 @@ describe('token use cases', () => {
 
     tokens = new InMemoryTokenRepository();
     const owners = new TokenOwnerValidator(new GetUserByIdUseCase(users));
-    create = new CreateTokenUseCase(tokens, owners);
-    update = new UpdateTokenUseCase(tokens, owners);
+    sheetStore = new InMemorySheetRepository();
+    const sheets = new TokenSheetLink(new FindSheetUseCase(sheetStore));
+    sync = new SyncSheetTokensUseCase(tokens);
+    create = new CreateTokenUseCase(tokens, owners, sheets);
+    update = new UpdateTokenUseCase(tokens, owners, sheets);
     move = new MoveTokenUseCase(tokens);
     drag = new AuthorizeTokenDragUseCase(tokens);
     remove = new DeleteTokenUseCase(tokens);
@@ -186,6 +198,92 @@ describe('token use cases', () => {
       await expect(remove.execute(master, id)).rejects.toBeInstanceOf(
         TokenNotFoundError,
       );
+    });
+  });
+
+  describe('tokens linked to a sheet', () => {
+    const kian = CharacterSheet.create({
+      id: 'sheet-kian',
+      ownerId: 'player-1',
+      kind: 'agent',
+      data: {
+        identity: { name: 'Kian Ferreira', codename: 'Corvo', sex: 'male' },
+      },
+      now: new Date(),
+    });
+
+    beforeEach(() => sheetStore.save(kian));
+
+    it('takes the name, kind, sex and owner from the sheet', async () => {
+      const token = await create.execute(master, {
+        ...agentInput,
+        label: 'Outro',
+        kind: 'npc',
+        ownerId: null,
+        sheetId: kian.id,
+      });
+
+      expect(token).toMatchObject({
+        label: 'Corvo',
+        kind: 'agent',
+        sex: 'male',
+        ownerId: 'player-1',
+        sheetId: kian.id,
+      });
+    });
+
+    it('ignores edits to what the sheet decides, and frees them when unlinked', async () => {
+      const { id } = await create.execute(master, agentInput);
+
+      const linked = await update.execute(master, { id, sheetId: kian.id });
+      const renamed = await update.execute(master, { id, label: 'X', size: 2 });
+      const unlinked = await update.execute(master, {
+        id,
+        sheetId: null,
+        label: 'Livre',
+      });
+
+      expect(linked.token).toMatchObject({ label: 'Corvo', sheetId: kian.id });
+      expect(renamed.token).toMatchObject({ label: 'Corvo', size: 2 });
+      expect(unlinked.token).toMatchObject({
+        label: 'Livre',
+        sheetId: null,
+        ownerId: 'player-1',
+      });
+    });
+
+    it('refuses a sheet that does not exist', async () => {
+      await expect(
+        create.execute(master, { ...agentInput, sheetId: 'missing' }),
+      ).rejects.toBeInstanceOf(InvalidTokenError);
+    });
+
+    it('follows the sheet when it changes and skips tokens already in sync', async () => {
+      const { id } = await create.execute(master, {
+        ...agentInput,
+        sheetId: kian.id,
+      });
+      await create.execute(master, { ...agentInput, label: 'Solto' });
+
+      const unchanged = await sync.execute(toSheetView(kian));
+      const handed = kian.edit(
+        {
+          data: { identity: { name: 'Kian', codename: '' } },
+          ownerId: 'player-2',
+        },
+        new Date(),
+      );
+      const synced = await sync.execute(toSheetView(handed));
+
+      expect(unchanged).toEqual([]);
+      expect(synced).toHaveLength(1);
+      expect(synced[0]).toMatchObject({
+        id,
+        label: 'Kian',
+        sex: null,
+        ownerId: 'player-2',
+        version: 2,
+      });
     });
   });
 
