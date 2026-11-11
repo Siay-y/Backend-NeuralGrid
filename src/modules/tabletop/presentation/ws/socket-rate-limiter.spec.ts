@@ -20,6 +20,23 @@ describe('SocketRateLimiter', () => {
     expect(limiter.tryConsume()).toBe(false);
   });
 
+  it('tells how long until the next action is allowed', () => {
+    let now = 0;
+    const limiter = new SocketRateLimiter(
+      { capacity: 1, refillPerSecond: 0.5 },
+      () => now,
+    );
+
+    expect(limiter.retryAfterMs()).toBe(0);
+    expect(limiter.tryConsume()).toBe(true);
+    expect(limiter.retryAfterMs()).toBe(2000);
+
+    now = 1500;
+    expect(limiter.retryAfterMs()).toBe(500);
+    now = 2000;
+    expect(limiter.tryConsume()).toBe(true);
+  });
+
   it('never refills beyond capacity', () => {
     let now = 0;
     const limiter = new SocketRateLimiter(

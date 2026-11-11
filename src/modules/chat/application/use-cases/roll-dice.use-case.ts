@@ -10,6 +10,7 @@ import type { ChatActor } from '../../domain/policies/message-policy';
 import { ChatMessageRepository } from '../../domain/repositories/chat-message.repository';
 import { type MessageView, toMessageView } from '../dtos/message-view';
 import { RandomSource } from '../ports/random-source';
+import { ChatHistoryRetention } from '../services/chat-history-retention';
 import { MessageAudienceValidator } from '../services/message-audience-validator';
 
 export interface RollDiceInput extends MessageAudience {
@@ -22,6 +23,7 @@ export class RollDiceUseCase {
   constructor(
     private readonly messages: ChatMessageRepository,
     private readonly audience: MessageAudienceValidator,
+    private readonly retention: ChatHistoryRetention,
     private readonly random: RandomSource,
   ) {}
 
@@ -41,6 +43,7 @@ export class RollDiceUseCase {
     });
     await this.audience.assertValid(message);
     await this.messages.save(message);
+    await this.retention.recordInsert();
     return toMessageView(message);
   }
 }

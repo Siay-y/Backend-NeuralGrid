@@ -6,6 +6,8 @@ export abstract class ChatMessageRepository {
 
   abstract deleteAll(): Promise<number>;
 
+  abstract keepNewest(limit: number): Promise<number>;
+
   abstract findRecentVisibleTo(
     viewer: ChatActor,
     limit: number,

@@ -1,5 +1,6 @@
 import type { DataSourceOptions } from 'typeorm';
 import { ChatMessageOrmEntity } from '../../modules/chat/infrastructure/persistence/typeorm/entities/chat-message.orm-entity';
+import { DrawingOrmEntity } from '../../modules/tabletop/infrastructure/persistence/typeorm/entities/drawing.orm-entity';
 import { TokenOrmEntity } from '../../modules/tabletop/infrastructure/persistence/typeorm/entities/token.orm-entity';
 import { UserOrmEntity } from '../../modules/users/infrastructure/persistence/typeorm/entities/user.orm-entity';
 import { DatabaseSslMode } from './database-ssl-mode';
@@ -8,6 +9,7 @@ import { CreateTokens1763337600000 } from './migrations/1763337600000-create-tok
 import { CreateChatMessages1763942400000 } from './migrations/1763942400000-create-chat-messages';
 import { AddTokenIconAndVisibility1764547200000 } from './migrations/1764547200000-add-token-icon-and-visibility';
 import { AddTokenSexAndNameVisibility1765152000000 } from './migrations/1765152000000-add-token-sex-and-name-visibility';
+import { CreateDrawings1765756800000 } from './migrations/1765756800000-create-drawings';
 
 export interface DatabaseSettings {
   url: string;
@@ -36,13 +38,19 @@ export function buildDataSourceOptions(
     type: 'postgres',
     url: withoutSslParameters(settings.url),
     ssl: SSL_BY_MODE[settings.sslMode],
-    entities: [UserOrmEntity, TokenOrmEntity, ChatMessageOrmEntity],
+    entities: [
+      UserOrmEntity,
+      TokenOrmEntity,
+      ChatMessageOrmEntity,
+      DrawingOrmEntity,
+    ],
     migrations: [
       CreateUsers1762790400000,
       CreateTokens1763337600000,
       CreateChatMessages1763942400000,
       AddTokenIconAndVisibility1764547200000,
       AddTokenSexAndNameVisibility1765152000000,
+      CreateDrawings1765756800000,
     ],
     migrationsTableName: 'typeorm_migrations',
     uuidExtension: 'pgcrypto',

@@ -20,9 +20,21 @@ export class RateLimitedError extends DomainError {
   }
 }
 
+export class CooldownError extends DomainError {
+  readonly code = 'COOLDOWN';
+  readonly category = 'invalid';
+
+  constructor(readonly retryAfterMs: number) {
+    super(
+      `Muitos envios seguidos. Aguarde ${Math.ceil(retryAfterMs / 1000)} s para enviar de novo`,
+    );
+  }
+}
+
 export interface WsError {
   code: string;
   message: string;
+  retryAfterMs?: number;
 }
 
 export type WsResult<T> = { ok: true; data: T } | { ok: false; error: WsError };

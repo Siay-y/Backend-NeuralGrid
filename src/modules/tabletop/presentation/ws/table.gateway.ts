@@ -23,10 +23,18 @@ import { SendMessageUseCase } from '../../../chat/application/use-cases/send-mes
 import { AuthenticateAccessTokenUseCase } from '../../../auth/application/use-cases/authenticate-access-token.use-case';
 import { ListUsersUseCase } from '../../../users/application/use-cases/list-users.use-case';
 import {
+  type DrawingsErased,
+  type DrawingView,
+} from '../../application/dtos/drawing-view';
+import {
   type TokenView,
   viewFor,
   viewForPlayers,
 } from '../../application/dtos/token-view';
+import { ClearDrawingsUseCase } from '../../application/use-cases/clear-drawings.use-case';
+import { CreateDrawingUseCase } from '../../application/use-cases/create-drawing.use-case';
+import { EraseDrawingsUseCase } from '../../application/use-cases/erase-drawings.use-case';
+import { ListDrawingsUseCase } from '../../application/use-cases/list-drawings.use-case';
 import { AuthorizeTokenDragUseCase } from '../../application/use-cases/authorize-token-drag.use-case';
 import { CreateTokenUseCase } from '../../application/use-cases/create-token.use-case';
 import { DeleteTokenUseCase } from '../../application/use-cases/delete-token.use-case';
@@ -36,11 +44,18 @@ import { UpdateTokenUseCase } from '../../application/use-cases/update-token.use
 import type { TableActor } from '../../domain/policies/token-policy';
 import { RollDiceDto, SendMessageDto } from './dtos/chat.dtos';
 import {
+  ClearDrawingsDto,
+  CreateDrawingDto,
+  DrawingIdsDto,
+  RulerDto,
+} from './dtos/drawing.dtos';
+import {
   CreateTokenDto,
   TokenIdDto,
   TokenPositionDto,
   UpdateTokenDto,
 } from './dtos/token.dtos';
+import { ActionCooldowns, type CooldownAction } from './action-cooldowns';
 import { PresenceTracker } from './presence-tracker';
 import { SocketRateLimiter } from './socket-rate-limiter';
 import {
@@ -51,7 +66,12 @@ import {
   TableServerEvent,
   userRoom,
 } from './table.events';
-import { parsePayload, RateLimitedError, type WsResult } from './ws-payload';
+import {
+  CooldownError,
+  parsePayload,
+  RateLimitedError,
+  type WsResult,
+} from './ws-payload';
 
 interface TableSocketData {
   user: AuthenticatedUser;
@@ -77,6 +97,7 @@ export class TableGateway
   private readonly server: Namespace;
 
   private readonly logger = new Logger(TableGateway.name);
+  private readonly cooldowns = new ActionCooldowns();
 
   constructor(
     private readonly authenticate: AuthenticateAccessTokenUseCase,
@@ -92,6 +113,10 @@ export class TableGateway
     private readonly sendMessage: SendMessageUseCase,
     private readonly rollDice: RollDiceUseCase,
     private readonly clearChat: ClearChatUseCase,
+    private readonly listDrawings: ListDrawingsUseCase,
+    private readonly createDrawing: CreateDrawingUseCase,
+    private readonly eraseDrawings: EraseDrawingsUseCase,
+    private readonly clearDrawings: ClearDrawingsUseCase,
   ) {}
 
   afterInit(namespace: Namespace): void {
@@ -127,10 +152,11 @@ export class TableGateway
     );
 
     try {
-      const [tokens, users, messages] = await Promise.all([
+      const [tokens, users, messages, drawings] = await Promise.all([
         this.listTokens.execute({ id: user.id, role: user.role }),
         this.listUsers.execute(),
         this.listMessages.execute({ id: user.id, role: user.role }),
+        this.listDrawings.execute(),
       ]);
       socket.emit(TableServerEvent.Snapshot, {
         you: user,
@@ -142,6 +168,7 @@ export class TableGateway
         })),
         online: this.presence.onlineUserIds(),
         messages,
+        drawings,
       });
     } catch (error) {
       this.logger.error(error instanceof Error ? error.stack : String(error));
@@ -251,6 +278,7 @@ export class TableGateway
   ): Promise<WsResult<MessageView>> {
     return this.run(socket, async (actor) => {
       const dto = await parsePayload(SendMessageDto, body);
+      this.assertCooldown(actor, 'chat');
       const message = await this.sendMessage.execute(actor, {
         text: dto.text,
         visibility: dto.visibility,
@@ -268,6 +296,7 @@ export class TableGateway
   ): Promise<WsResult<MessageView>> {
     return this.run(socket, async (actor) => {
       const dto = await parsePayload(RollDiceDto, body);
+      this.assertCooldown(actor, 'dice');
       const message = await this.rollDice.execute(actor, {
         expression: dto.expression,
         label: dto.label ?? null,
@@ -288,6 +317,86 @@ export class TableGateway
       this.server.emit(TableServerEvent.ChatCleared, cleared);
       return cleared;
     });
+  }
+
+  @SubscribeMessage(TableClientEvent.CreateDrawing)
+  draw(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<DrawingView>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(CreateDrawingDto, body);
+      const drawing = await this.createDrawing.execute(actor, dto);
+      socket.broadcast.emit(TableServerEvent.DrawingCreated, drawing);
+      return drawing;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.EraseDrawings)
+  erase(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<DrawingsErased>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(DrawingIdsDto, body);
+      const erased = await this.eraseDrawings.execute(actor, dto.ids);
+      this.announceErased(socket, erased);
+      return erased;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.ClearDrawings)
+  clearBoard(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<DrawingsErased>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(ClearDrawingsDto, body);
+      const erased = await this.clearDrawings.execute(actor, dto.scope);
+      this.announceErased(socket, erased);
+      return erased;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.MoveRuler)
+  measure(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<null>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(RulerDto, body);
+      socket.broadcast.emit(TableServerEvent.RulerMoved, {
+        by: actor.id,
+        fromCol: dto.fromCol,
+        fromRow: dto.fromRow,
+        toCol: dto.toCol,
+        toRow: dto.toRow,
+      });
+      return null;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.ClearRuler)
+  stopMeasuring(
+    @ConnectedSocket() socket: TableSocket,
+  ): Promise<WsResult<null>> {
+    return this.run(socket, (actor) => {
+      socket.broadcast.emit(TableServerEvent.RulerCleared, { by: actor.id });
+      return Promise.resolve(null);
+    });
+  }
+
+  private assertCooldown(actor: TableActor, action: CooldownAction): void {
+    const retryAfterMs = this.cooldowns.take(actor.id, action);
+    if (retryAfterMs > 0) {
+      throw new CooldownError(retryAfterMs);
+    }
+  }
+
+  private announceErased(socket: TableSocket, erased: DrawingsErased): void {
+    if (erased.ids.length > 0) {
+      socket.broadcast.emit(TableServerEvent.DrawingsErased, erased);
+    }
   }
 
   private publishToken(
@@ -331,6 +440,16 @@ export class TableGateway
       const { id, role } = socket.data.user;
       return { ok: true, data: await action({ id, role }) };
     } catch (error) {
+      if (error instanceof CooldownError) {
+        return {
+          ok: false,
+          error: {
+            code: error.code,
+            message: error.message,
+            retryAfterMs: error.retryAfterMs,
+          },
+        };
+      }
       if (error instanceof DomainError) {
         return {
           ok: false,

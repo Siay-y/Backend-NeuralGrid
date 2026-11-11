@@ -261,10 +261,12 @@ describe('token use cases', () => {
   });
 
   describe('hidden names', () => {
-    it('shows ??? to players and the real name to the master', async () => {
+    it('hides the whole identity from players and keeps it for the master', async () => {
       await create.execute(master, {
         ...agentInput,
         label: 'Kian',
+        kind: 'threat',
+        icon: 'raven',
         sex: 'male',
         nameHidden: true,
       });
@@ -274,12 +276,16 @@ describe('token use cases', () => {
 
       expect(forMaster).toMatchObject({
         label: 'Kian',
+        kind: 'threat',
+        icon: 'raven',
         sex: 'male',
         nameHidden: true,
       });
       expect(forPlayer).toMatchObject({
         label: '???',
-        sex: 'male',
+        kind: 'npc',
+        icon: null,
+        sex: null,
         nameHidden: true,
       });
     });

@@ -19,6 +19,14 @@ interface Snapshot {
   members: Array<Record<string, unknown>>;
   online: string[];
   messages: MessageData[];
+  drawings: DrawingData[];
+}
+
+interface DrawingData {
+  id: string;
+  authorId: string;
+  color: string;
+  points: number[];
 }
 
 interface MessageData {
@@ -286,7 +294,7 @@ describe('Table gateway (e2e)', () => {
     await send(master.socket, 'token:delete', { id: tokenId });
   });
 
-  it('sends ??? to players for a token whose name is hidden', async () => {
+  it('sends an anonymous token to players while its name is hidden', async () => {
     const master = await open(sessions.mestre.token);
     const player = await open(sessions.jogador1.token);
 
@@ -300,6 +308,7 @@ describe('Table gateway (e2e)', () => {
       {
         label: 'Kian',
         kind: 'agent',
+        icon: 'raven',
         sex: 'male',
         nameHidden: true,
         ownerId: sessions.jogador1.userId,
@@ -310,7 +319,9 @@ describe('Table gateway (e2e)', () => {
     expect(created.data).toMatchObject({ label: 'Kian', sex: 'male' });
     expect(await playerSeesCreation).toMatchObject({
       label: '???',
-      sex: 'male',
+      kind: 'npc',
+      icon: null,
+      sex: null,
     });
 
     const moved = await send<{ label: string }>(player.socket, 'token:move', {
@@ -326,7 +337,7 @@ describe('Table gateway (e2e)', () => {
     ) as { label?: string } | undefined;
     expect(snapshotLabel?.label).toBe('???');
 
-    const playerSeesName = next<{ label: string }>(
+    const playerSeesName = next<Record<string, unknown>>(
       player.socket,
       'token:updated',
     );
@@ -334,7 +345,12 @@ describe('Table gateway (e2e)', () => {
       id: created.data!.id,
       nameHidden: false,
     });
-    expect((await playerSeesName).label).toBe('Kian');
+    expect(await playerSeesName).toMatchObject({
+      label: 'Kian',
+      kind: 'agent',
+      icon: 'raven',
+      sex: 'male',
+    });
 
     const badSex = await send(master.socket, 'token:update', {
       id: created.data!.id,
@@ -343,6 +359,102 @@ describe('Table gateway (e2e)', () => {
     expect(badSex.error?.code).toBe('INVALID_PAYLOAD');
 
     await send(master.socket, 'token:delete', { id: created.data!.id });
+  });
+
+  it('shares drawings and rulers with the whole table', async () => {
+    const master = await open(sessions.mestre.token);
+    const player = await open(sessions.jogador1.token);
+    const other = await open(sessions.jogador2.token);
+
+    const otherSeesStroke = next<DrawingData>(other.socket, 'drawing:created');
+    const stroke = await send<DrawingData>(player.socket, 'drawing:create', {
+      shape: 'free',
+      color: 'lavender',
+      width: 4,
+      points: [0, 0, 1.005, 1, 2, 1.5],
+    });
+    expect(stroke.data).toMatchObject({
+      authorId: sessions.jogador1.userId,
+      color: 'lavender',
+      points: [0, 0, 1, 1, 2, 1.5],
+    });
+    expect((await otherSeesStroke).id).toBe(stroke.data!.id);
+
+    const badColor = await send(player.socket, 'drawing:create', {
+      shape: 'free',
+      color: '#ff00ff',
+      width: 4,
+      points: [0, 0, 1, 1],
+    });
+    expect(badColor.error?.code).toBe('INVALID_PAYLOAD');
+
+    const arrow = await send<DrawingData>(master.socket, 'drawing:create', {
+      shape: 'arrow',
+      color: 'rose',
+      width: 8,
+      points: [3, 3, 6, 4],
+    });
+
+    const late = await open(sessions.jogador2.token);
+    expect(late.snapshot.drawings.map((drawing) => drawing.id)).toEqual([
+      stroke.data!.id,
+      arrow.data!.id,
+    ]);
+
+    const refused = await send(other.socket, 'drawing:erase', {
+      ids: [stroke.data!.id],
+    });
+    expect(refused.error?.code).toBe('DRAWING_FORBIDDEN');
+    const notAllowed = await send(player.socket, 'drawing:clear', {
+      scope: 'all',
+    });
+    expect(notAllowed.error?.code).toBe('DRAWING_FORBIDDEN');
+
+    const otherSeesErase = next<{ by: string; ids: string[] }>(
+      other.socket,
+      'drawing:erased',
+    );
+    const erased = await send(player.socket, 'drawing:erase', {
+      ids: [stroke.data!.id],
+    });
+    expect(erased.ok).toBe(true);
+    expect(await otherSeesErase).toEqual({
+      by: sessions.jogador1.userId,
+      ids: [stroke.data!.id],
+    });
+
+    const masterSeesRuler = next<Record<string, unknown>>(
+      master.socket,
+      'ruler:moved',
+    );
+    await send(player.socket, 'ruler:move', {
+      fromCol: 0,
+      fromRow: 0,
+      toCol: 4,
+      toRow: 2,
+    });
+    expect(await masterSeesRuler).toEqual({
+      by: sessions.jogador1.userId,
+      fromCol: 0,
+      fromRow: 0,
+      toCol: 4,
+      toRow: 2,
+    });
+    const masterSeesRulerEnd = next<{ by: string }>(
+      master.socket,
+      'ruler:cleared',
+    );
+    await send(player.socket, 'ruler:clear', {});
+    expect(await masterSeesRulerEnd).toEqual({
+      by: sessions.jogador1.userId,
+    });
+
+    const cleared = await send<{ ids: string[] }>(
+      master.socket,
+      'drawing:clear',
+      { scope: 'all' },
+    );
+    expect(cleared.data?.ids).toEqual([arrow.data!.id]);
   });
 
   it('delivers chat and rolls only to who may see them', async () => {
@@ -518,5 +630,32 @@ describe('Table gateway (e2e)', () => {
     expect(
       results.some((result) => result.error?.code === 'RATE_LIMITED'),
     ).toBe(true);
+  });
+
+  it('makes spammers wait before sending or rolling again', async () => {
+    const spammer = await open(sessions.jogador2.token);
+
+    const sends = [];
+    for (let index = 0; index < 5; index++) {
+      sends.push(
+        await send<MessageData>(spammer.socket, 'chat:send', {
+          text: `spam ${index}`,
+          visibility: 'public',
+        }),
+      );
+    }
+    expect(sends.slice(0, 4).every((result) => result.ok)).toBe(true);
+    const refused = sends[4] as Ack<MessageData> & {
+      error?: { retryAfterMs?: number };
+    };
+    expect(refused.error?.code).toBe('COOLDOWN');
+    expect(refused.error?.retryAfterMs).toBeGreaterThan(0);
+    expect(refused.error?.retryAfterMs).toBeLessThanOrEqual(2000);
+
+    const roll = await send(spammer.socket, 'dice:roll', {
+      expression: '1d20',
+      visibility: 'public',
+    });
+    expect(roll.ok).toBe(true);
   });
 });

@@ -5,6 +5,7 @@ import type { TokenKind } from '../../domain/value-objects/token-kind';
 import type { TokenSex } from '../../domain/value-objects/token-sex';
 
 export const HIDDEN_TOKEN_NAME = '???';
+export const MASKED_TOKEN_KIND: TokenKind = 'npc';
 
 export interface TokenView {
   id: string;
@@ -39,7 +40,16 @@ export function toTokenView(token: Token): TokenView {
 }
 
 export function viewForPlayers(view: TokenView): TokenView {
-  return view.nameHidden ? { ...view, label: HIDDEN_TOKEN_NAME } : view;
+  if (!view.nameHidden) {
+    return view;
+  }
+  return {
+    ...view,
+    label: HIDDEN_TOKEN_NAME,
+    kind: MASKED_TOKEN_KIND,
+    icon: null,
+    sex: null,
+  };
 }
 
 export function viewFor(actor: TableActor, view: TokenView): TokenView {

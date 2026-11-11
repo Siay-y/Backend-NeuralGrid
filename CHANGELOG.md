@@ -6,6 +6,37 @@ do roadmap e o patch a cada melhoria ou correção. As notas para os jogadores
 ficam na aba Atualizações do
 [frontend](https://github.com/Siay-y/Frontend-NeuralGrid).
 
+## 0.3.3 (2026-11-10)
+
+Desenhos, régua, token incógnito e limite de envios.
+
+### Novo
+
+- Tabela `drawings` com forma (`free`, `arrow`, `rect`, `ellipse`), cor de uma
+  paleta fechada, espessura (2, 4 ou 8) e pontos em células, arredondados em
+  duas casas. Até 1000 pontos por traço e 500 desenhos por mesa.
+- Eventos `drawing:create`, `drawing:erase` e `drawing:clear`, com
+  `drawing:created` e `drawing:erased` para o resto da mesa. Jogadores apagam
+  só os próprios desenhos; o mestre apaga qualquer um e pode limpar todos.
+- Desenhos no snapshot, na ordem em que foram feitos.
+- Régua ao vivo: `ruler:move` e `ruler:clear` repassam `ruler:moved` e
+  `ruler:cleared` aos outros, sem gravar nada.
+- Migration `CreateDrawings`, aplicada sozinha no boot.
+
+### Melhorado
+
+- Cada pessoa tem uma reserva de 4 envios para `chat:send` e outra para
+  `dice:roll`, recarregada a 1 a cada 2 segundos. Vale para todas as abas da
+  mesma conta. Passou disso, a resposta é `COOLDOWN` com `retryAfterMs`, e nada
+  é gravado.
+- O histórico do chat guarda as 500 mensagens mais recentes. A limpeza roda a
+  cada 20 envios e no primeiro envio depois do boot.
+
+### Corrigido
+
+- Com `nameHidden`, os jogadores recebem o token sem identidade: nome `???`,
+  tipo neutro `npc`, ícone e sexo nulos. Antes só o nome era escondido.
+
 ## 0.3.2 (2026-11-10)
 
 Sexo e nome oculto.

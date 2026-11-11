@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from '../users/users.module';
 import { RandomSource } from './application/ports/random-source';
+import { ChatHistoryRetention } from './application/services/chat-history-retention';
 import { MessageAudienceValidator } from './application/services/message-audience-validator';
 import { ClearChatUseCase } from './application/use-cases/clear-chat.use-case';
 import { ListRecentMessagesUseCase } from './application/use-cases/list-recent-messages.use-case';
@@ -18,6 +19,7 @@ import { CryptoRandomSource } from './infrastructure/random/crypto-random-source
     { provide: ChatMessageRepository, useClass: TypeOrmChatMessageRepository },
     { provide: RandomSource, useClass: CryptoRandomSource },
     MessageAudienceValidator,
+    ChatHistoryRetention,
     SendMessageUseCase,
     RollDiceUseCase,
     ListRecentMessagesUseCase,
