@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { EnvService } from '../../core/config/env.service';
+import { LoginAttemptLimiter } from '../../core/security/login-attempt-limiter';
 import { UsersModule } from '../users/users.module';
 import { AccessTokenIssuer } from './application/ports/access-token-issuer';
 import { AccessTokenVerifier } from './application/ports/access-token-verifier';
@@ -39,6 +40,7 @@ import { JwtStrategy } from './presentation/http/strategies/jwt.strategy';
     { provide: AccessTokenIssuer, useClass: JwtAccessTokenIssuer },
     { provide: AccessTokenVerifier, useClass: JwtAccessTokenVerifier },
     LoginUseCase,
+    LoginAttemptLimiter,
     ResolveSessionUserUseCase,
     AuthenticateAccessTokenUseCase,
     JwtStrategy,

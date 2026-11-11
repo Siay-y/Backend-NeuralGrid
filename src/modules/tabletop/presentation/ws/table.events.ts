@@ -37,6 +37,7 @@ export const TableServerEvent = {
   SheetDeleted: 'sheet:deleted',
   SheetStats: 'sheet:stats',
   SessionExpired: 'session:expired',
+  ConnectionLimit: 'session:limit',
 } as const;
 
 export const HANDSHAKE_UNAUTHORIZED = 'UNAUTHORIZED';

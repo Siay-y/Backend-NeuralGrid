@@ -4,6 +4,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
+import { DATABASE_HEALTH_LIMIT } from '../src/core/health/health.controller';
 import { configureHttp } from '../src/core/http/configure-http';
 import { ProvisionUserUseCase } from '../src/modules/users/application/use-cases/provision-user.use-case';
 
@@ -152,21 +153,32 @@ describe('Auth (e2e)', () => {
       .expect(401);
   });
 
-  it('blocks repeated attempts against the same account from many addresses', async () => {
-    for (let attempt = 0; attempt < 5; attempt++) {
-      await login({
-        username: 'alvo',
-        password: `tentativa-${attempt}`,
-      }).expect(401);
+  it('holds back the addresses attacking an account but not its owner', async () => {
+    const attackers = Array.from({ length: 5 }, () => nextClientIp());
+    for (const ip of attackers) {
+      await login({ username: 'mestre', password: 'chute-errado' }, ip).expect(
+        401,
+      );
     }
 
-    const blocked = await login({
-      username: 'alvo',
-      password: 'mais-uma',
-    }).expect(429);
-
+    const blocked = await login(
+      { username: 'mestre', password: 'mais-um-chute' },
+      attackers[0],
+    ).expect(429);
     expect(Number(blocked.headers['retry-after'])).toBeGreaterThan(0);
     expect(blocked.body.statusCode).toBe(429);
+
+    await login({ username: 'mestre', password: MASTER_PASSWORD }).expect(200);
+  });
+
+  it('never locks out a player who keeps signing in correctly', async () => {
+    const ip = nextClientIp();
+    for (let tab = 0; tab < 8; tab++) {
+      await login(
+        { username: 'jogador1', password: PLAYER_PASSWORD },
+        ip,
+      ).expect(200);
+    }
   });
 
   it('blocks a single address hammering different accounts', async () => {
@@ -183,9 +195,21 @@ describe('Auth (e2e)', () => {
     );
   });
 
-  it('reports health without authentication', async () => {
+  it('reports liveness without touching the database', async () => {
+    await request(server).get('/api/health').expect(200, { status: 'ok' });
+  });
+
+  it('checks the database on a rate limited endpoint', async () => {
+    const ip = nextClientIp();
+    for (let call = 0; call < DATABASE_HEALTH_LIMIT; call++) {
+      await request(server)
+        .get('/api/health/db')
+        .set('X-Forwarded-For', ip)
+        .expect(200, { status: 'ok', database: 'up' });
+    }
     await request(server)
-      .get('/api/health')
-      .expect(200, { status: 'ok', database: 'up' });
+      .get('/api/health/db')
+      .set('X-Forwarded-For', ip)
+      .expect(429);
   });
 });

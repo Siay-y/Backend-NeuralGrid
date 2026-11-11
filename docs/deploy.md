@@ -73,10 +73,13 @@ npm run seed:reset
 ## 4. Conferência
 
 ```bash
-curl https://<servico>.onrender.com/api/health
+curl https://<servico>.onrender.com/api/health/db
 ```
 
-A resposta esperada é `{"status":"ok","database":"up"}`. Em seguida, aponte o
+A resposta esperada é `{"status":"ok","database":"up"}`. O `/api/health`, usado
+pelo Render, só confirma que a API está de pé e não consulta o banco, para o
+Neon poder dormir quando ninguém está jogando. O `/api/health/db` consulta o
+banco e aceita 30 chamadas por minuto por IP. Em seguida, aponte o
 `apiUrl` de `src/environments/environment.ts` do frontend e o `connect-src` do
 `firebase.json` para a mesma URL.
 

@@ -102,6 +102,7 @@ type TableSocket = Socket<
 >;
 
 const RATE_LIMIT = { capacity: 30, refillPerSecond: 15 };
+export const MAX_CONNECTIONS_PER_USER = 5;
 
 @WebSocketGateway({ namespace: TABLE_NAMESPACE })
 export class TableGateway
@@ -156,6 +157,13 @@ export class TableGateway
 
   async handleConnection(socket: TableSocket): Promise<void> {
     const { user, expiresAt } = socket.data;
+    if (this.presence.connectionCount(user.id) >= MAX_CONNECTIONS_PER_USER) {
+      socket.emit(TableServerEvent.ConnectionLimit, {
+        limit: MAX_CONNECTIONS_PER_USER,
+      });
+      socket.disconnect(true);
+      return;
+    }
     socket.data.expiryTimer = setTimeout(
       () => {
         socket.emit(TableServerEvent.SessionExpired);

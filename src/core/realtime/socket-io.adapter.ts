@@ -3,6 +3,8 @@ import { IoAdapter } from '@nestjs/platform-socket.io';
 import type { IncomingMessage } from 'node:http';
 import type { Server, ServerOptions } from 'socket.io';
 
+const COMPRESSION_THRESHOLD_BYTES = 1024;
+
 export interface SocketIoSettings {
   allowedOrigins: string[];
 }
@@ -22,6 +24,7 @@ export class AppSocketIoAdapter extends IoAdapter {
       ...(options as ServerOptions),
       serveClient: false,
       maxHttpBufferSize: 16 * 1024,
+      perMessageDeflate: { threshold: COMPRESSION_THRESHOLD_BYTES },
       pingInterval: 25_000,
       pingTimeout: 20_000,
       cors: { origin: this.settings.allowedOrigins, credentials: false },

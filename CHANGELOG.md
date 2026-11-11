@@ -6,6 +6,29 @@ do roadmap e o patch a cada melhoria ou correção. As notas para os jogadores
 ficam na aba Atualizações do
 [frontend](https://github.com/Siay-y/Frontend-NeuralGrid).
 
+## 0.4.2 (2026-11-11)
+
+Desempenho do tempo real e reforço de segurança.
+
+### Melhorias
+
+- O Socket.io comprime com `perMessageDeflate` as mensagens acima de 1 kB. O
+  snapshot de uma mesa com 60 desenhos caiu de 213 kB para cerca de 57 kB, e
+  os eventos pequenos, como arrastar e régua, seguem sem compressão.
+
+### Segurança
+
+- O limite de login por conta passou para o `LoginAttemptLimiter` e só conta
+  erros de senha, por IP. Login certo não soma mais, então várias abas não
+  bloqueiam o jogador, e quem souber o nome de usuário do mestre não consegue
+  mais trancá-lo para fora: com 5 erros na conta, só os IPs que erraram ficam
+  bloqueados. O throttler `login-account` saiu.
+- Cada conta abre no máximo 5 conexões de tempo real ao mesmo tempo. A sexta
+  recebe `session:limit` e é derrubada.
+- `GET /api/health` não consulta mais o banco, e o Neon pode dormir mesmo com
+  alguém chamando a API. A checagem do banco foi para `GET /api/health/db`,
+  com limite de 30 chamadas por minuto por IP.
+
 ## 0.4.1 (2026-11-11)
 
 Destreza e visibilidade controlada pela ficha.

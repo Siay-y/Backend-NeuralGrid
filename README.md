@@ -104,7 +104,7 @@ src/
 ├── core/
 │   ├── config/                   validação do ambiente e EnvService tipado
 │   ├── database/                 opções do TypeORM, migrations e seed
-│   ├── health/                   GET /api/health
+│   ├── health/                   GET /api/health e /api/health/db
 │   ├── http/                     Helmet, CORS, proxy, body limit e ValidationPipe
 │   ├── realtime/                 adapter do Socket.io: CORS, origem e limites
 │   └── security/                 throttlers e guard que emite Retry-After
