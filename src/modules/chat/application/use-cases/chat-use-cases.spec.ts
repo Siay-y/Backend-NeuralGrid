@@ -1,4 +1,5 @@
 import { GetUserByIdUseCase } from '../../../users/application/use-cases/get-user-by-id.use-case';
+import { ChatHistoryRetention } from '../services/chat-history-retention';
 import { User } from '../../../users/domain/entities/user';
 import { Username } from '../../../users/domain/value-objects/username';
 import { InMemoryUserRepository } from '../../../users/testing/in-memory-user.repository';
@@ -45,10 +46,12 @@ describe('chat use cases', () => {
     const audience = new MessageAudienceValidator(
       new GetUserByIdUseCase(users),
     );
-    send = new SendMessageUseCase(messages, audience);
+    const retention = new ChatHistoryRetention(messages);
+    send = new SendMessageUseCase(messages, audience, retention);
     roll = new RollDiceUseCase(
       messages,
       audience,
+      retention,
       new ScriptedRandomSource([12, 19, 3]),
     );
     list = new ListRecentMessagesUseCase(messages);

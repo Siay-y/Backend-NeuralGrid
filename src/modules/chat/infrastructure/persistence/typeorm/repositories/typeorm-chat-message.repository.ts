@@ -25,6 +25,18 @@ export class TypeOrmChatMessageRepository extends ChatMessageRepository {
     return result.affected ?? 0;
   }
 
+  async keepNewest(limit: number): Promise<number> {
+    const result = await this.rows
+      .createQueryBuilder()
+      .delete()
+      .where(
+        `id IN (SELECT "id" FROM "chat_messages" ORDER BY "created_at" DESC, "id" DESC OFFSET :limit)`,
+        { limit },
+      )
+      .execute();
+    return result.affected ?? 0;
+  }
+
   async findRecentVisibleTo(
     viewer: ChatActor,
     limit: number,

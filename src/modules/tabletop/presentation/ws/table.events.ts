@@ -9,6 +9,11 @@ export const TableClientEvent = {
   SendMessage: 'chat:send',
   RollDice: 'dice:roll',
   ClearChat: 'chat:clear',
+  CreateDrawing: 'drawing:create',
+  EraseDrawings: 'drawing:erase',
+  ClearDrawings: 'drawing:clear',
+  MoveRuler: 'ruler:move',
+  ClearRuler: 'ruler:clear',
 } as const;
 
 export const TableServerEvent = {
@@ -20,6 +25,10 @@ export const TableServerEvent = {
   PresenceChanged: 'presence:changed',
   MessageCreated: 'chat:message',
   ChatCleared: 'chat:cleared',
+  DrawingCreated: 'drawing:created',
+  DrawingsErased: 'drawing:erased',
+  RulerMoved: 'ruler:moved',
+  RulerCleared: 'ruler:cleared',
   SessionExpired: 'session:expired',
 } as const;
 

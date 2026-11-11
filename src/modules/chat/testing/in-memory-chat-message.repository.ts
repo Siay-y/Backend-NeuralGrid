@@ -19,6 +19,15 @@ export class InMemoryChatMessageRepository extends ChatMessageRepository {
     return Promise.resolve(removed);
   }
 
+  keepNewest(limit: number): Promise<number> {
+    const sorted = [...this.messages].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+    );
+    const removed = Math.max(0, sorted.length - limit);
+    this.messages.splice(0, this.messages.length, ...sorted.slice(removed));
+    return Promise.resolve(removed);
+  }
+
   findRecentVisibleTo(
     viewer: ChatActor,
     limit: number,
