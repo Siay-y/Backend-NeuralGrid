@@ -8,6 +8,7 @@ export type SheetSex = (typeof SHEET_SEXES)[number];
 
 export const ATTRIBUTES = [
   'strength',
+  'dexterity',
   'agility',
   'resistance',
   'perception',
@@ -348,6 +349,10 @@ function assertName(data: SheetData): SheetData {
     throw new InvalidSheetError('Dê um nome ao personagem');
   }
   return data;
+}
+
+export function sheetDefense(data: SheetData): number {
+  return data.status.armor + Math.floor((data.attributes.resistance - 10) / 2);
 }
 
 export function normalizeSheetData(value: unknown): SheetData {

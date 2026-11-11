@@ -278,12 +278,36 @@ describe('token use cases', () => {
       expect(unchanged).toEqual([]);
       expect(synced).toHaveLength(1);
       expect(synced[0]).toMatchObject({
-        id,
-        label: 'Kian',
-        sex: null,
-        ownerId: 'player-2',
-        version: 2,
+        token: {
+          id,
+          label: 'Kian',
+          sex: null,
+          ownerId: 'player-2',
+          version: 2,
+        },
+        wasHidden: false,
       });
+    });
+
+    it('hides the token and its name when the sheet says so, and ignores the token toggles', async () => {
+      const { id } = await create.execute(master, {
+        ...agentInput,
+        sheetId: kian.id,
+      });
+
+      const hiddenSheet = kian.edit(
+        { hidden: true, nameHidden: true },
+        new Date(),
+      );
+      await sheetStore.save(hiddenSheet);
+      const [change] = await sync.execute(toSheetView(hiddenSheet));
+      const forced = await update.execute(master, { id, hidden: false });
+
+      expect(change).toMatchObject({
+        token: { hidden: true, nameHidden: true },
+        wasHidden: false,
+      });
+      expect(forced.token).toMatchObject({ hidden: true, nameHidden: true });
     });
   });
 

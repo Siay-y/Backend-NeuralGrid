@@ -35,6 +35,7 @@ export const TableServerEvent = {
   SheetCreated: 'sheet:created',
   SheetUpdated: 'sheet:updated',
   SheetDeleted: 'sheet:deleted',
+  SheetStats: 'sheet:stats',
   SessionExpired: 'session:expired',
 } as const;
 

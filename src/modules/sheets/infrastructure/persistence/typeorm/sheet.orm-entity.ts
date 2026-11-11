@@ -45,6 +45,15 @@ export class SheetOrmEntity {
   @Column({ type: 'jsonb' })
   data: SheetData;
 
+  @Column({ type: 'boolean', default: false })
+  hidden: boolean;
+
+  @Column({ name: 'name_hidden', type: 'boolean', default: false })
+  nameHidden: boolean;
+
+  @Column({ name: 'stats_hidden', type: 'boolean', default: true })
+  statsHidden: boolean;
+
   @Column({ type: 'integer', default: 1 })
   version: number;
 

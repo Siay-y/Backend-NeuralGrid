@@ -10,6 +10,7 @@ import { InMemorySheetRepository } from '../../testing/in-memory-sheet.repositor
 import {
   CreateSheetUseCase,
   DeleteSheetUseCase,
+  ListSheetStatsUseCase,
   ListSheetsUseCase,
   SheetOwnerValidator,
   SHEETS_PER_PLAYER,
@@ -27,6 +28,7 @@ describe('sheet use cases', () => {
   let update: UpdateSheetUseCase;
   let remove: DeleteSheetUseCase;
   let list: ListSheetsUseCase;
+  let stats: ListSheetStatsUseCase;
 
   beforeEach(async () => {
     const users = new InMemoryUserRepository();
@@ -48,6 +50,7 @@ describe('sheet use cases', () => {
     update = new UpdateSheetUseCase(sheets, owners);
     remove = new DeleteSheetUseCase(sheets);
     list = new ListSheetsUseCase(sheets);
+    stats = new ListSheetStatsUseCase(sheets);
   });
 
   it('gives a player their own agent sheet', async () => {
@@ -112,6 +115,62 @@ describe('sheet use cases', () => {
     ).rejects.toBeInstanceOf(SheetForbiddenError);
   });
 
+  it('lets only the master hide a sheet or its name', async () => {
+    const { id } = await create.execute(player, { data: named('Kian') });
+    const npc = await create.execute(master, {
+      data: named('Cultista'),
+      kind: 'threat',
+      hidden: true,
+      nameHidden: true,
+    });
+
+    const hidden = await update.execute(master, { id, hidden: true });
+
+    expect(npc).toMatchObject({ hidden: true, nameHidden: true });
+    expect(hidden.sheet).toMatchObject({ hidden: true, nameHidden: false });
+    expect(hidden.identityChanged).toBe(true);
+    await expect(
+      update.execute(player, { id, hidden: false }),
+    ).rejects.toBeInstanceOf(SheetForbiddenError);
+    await expect(
+      create.execute(player, { data: named('Outro'), nameHidden: true }),
+    ).rejects.toBeInstanceOf(SheetForbiddenError);
+  });
+
+  it('shares HP and defense with the table only when the master reveals them', async () => {
+    const boss = await create.execute(master, {
+      data: named('Dragão'),
+      kind: 'threat',
+    });
+    const mine = await create.execute(player, { data: named('Kian') });
+
+    const hurt = await update.execute(master, {
+      id: boss.id,
+      data: { status: { hp: { current: 80, max: 100 }, armor: 15 } },
+    });
+    const shown = await update.execute(master, {
+      id: boss.id,
+      statsHidden: false,
+    });
+    const revealed = await stats.execute();
+    const masked = await update.execute(master, {
+      id: boss.id,
+      nameHidden: true,
+    });
+
+    expect(boss.statsHidden).toBe(true);
+    expect(hurt.statsChanged).toBe(false);
+    expect(shown.statsChanged).toBe(true);
+    expect(revealed).toEqual([
+      { id: boss.id, hp: { current: 80, max: 100 }, defense: 15 },
+    ]);
+    expect(masked.statsChanged).toBe(true);
+    expect(await stats.execute()).toEqual([]);
+    await expect(
+      update.execute(player, { id: mine.id, statsHidden: false }),
+    ).rejects.toBeInstanceOf(SheetForbiddenError);
+  });
+
   it('reports the previous owner when the master hands a sheet over', async () => {
     const { id } = await create.execute(player, { data: named('Kian') });
 
@@ -132,6 +191,7 @@ describe('sheet use cases', () => {
     expect(await remove.execute(player, id)).toEqual({
       id,
       ownerId: 'player-1',
+      wasPublic: false,
     });
   });
 });

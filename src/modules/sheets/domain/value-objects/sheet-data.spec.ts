@@ -14,6 +14,7 @@ describe('sheet data', () => {
     });
     expect(data.attributes).toEqual({
       strength: 10,
+      dexterity: 10,
       agility: 10,
       resistance: 10,
       perception: 10,

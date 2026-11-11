@@ -716,6 +716,34 @@ describe('Table gateway (e2e)', () => {
       label: 'Corvo',
     });
 
+    const otherLosesToken = next<{ id: string }>(other.socket, 'token:deleted');
+    const hiddenByPlayer = await send(player.socket, 'sheet:update', {
+      id: sheetId,
+      hidden: true,
+    });
+    expect(hiddenByPlayer.error?.code).toBe('SHEET_FORBIDDEN');
+    await send(master.socket, 'sheet:update', { id: sheetId, hidden: true });
+    expect(await otherLosesToken).toEqual({ id: token.data!.id });
+
+    const otherSeesStats = next<{ id: string; stats: unknown }>(
+      other.socket,
+      'sheet:stats',
+    );
+    await send(master.socket, 'sheet:update', {
+      id: sheetId,
+      hidden: false,
+      statsHidden: false,
+    });
+    expect(await otherSeesStats).toEqual({
+      id: sheetId,
+      stats: { id: sheetId, hp: { current: 4, max: 20 }, defense: 10 },
+    });
+    const watcher = await open(sessions.jogador2.token);
+    expect(
+      (watcher.snapshot as unknown as { sheetStats: { id: string }[] })
+        .sheetStats,
+    ).toEqual([expect.objectContaining({ id: sheetId })]);
+
     const ghost = await send(master.socket, 'token:create', {
       label: 'Fantasma',
       kind: 'npc',
@@ -738,9 +766,10 @@ describe('Table gateway (e2e)', () => {
       (item) => item.id === token.data!.id,
     ) as { sheetId?: string | null } | undefined;
     expect(linked?.sheetId).toBeNull();
-    expect(otherEvents.filter((event) => event.startsWith('sheet:'))).toEqual(
-      [],
-    );
+    expect(otherEvents.filter((event) => event.startsWith('sheet:'))).toEqual([
+      'sheet:stats',
+      'sheet:stats',
+    ]);
 
     await send(master.socket, 'token:delete', { id: token.data!.id });
   });
