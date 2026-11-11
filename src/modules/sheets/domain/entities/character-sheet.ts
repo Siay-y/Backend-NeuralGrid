@@ -10,6 +10,9 @@ export interface CharacterSheetProps {
   ownerId: string | null;
   kind: SheetKind;
   data: SheetData;
+  hidden: boolean;
+  nameHidden: boolean;
+  statsHidden: boolean;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -20,7 +23,19 @@ export interface NewCharacterSheetProps {
   ownerId: string | null;
   kind: SheetKind;
   data: unknown;
+  hidden?: boolean;
+  nameHidden?: boolean;
+  statsHidden?: boolean;
   now: Date;
+}
+
+export interface SheetEdit {
+  data?: unknown;
+  kind?: SheetKind;
+  ownerId?: string | null;
+  hidden?: boolean;
+  nameHidden?: boolean;
+  statsHidden?: boolean;
 }
 
 export class CharacterSheet {
@@ -32,6 +47,9 @@ export class CharacterSheet {
       ownerId: input.ownerId,
       kind: input.kind,
       data: normalizeSheetData(input.data),
+      hidden: input.hidden === true,
+      nameHidden: input.nameHidden === true,
+      statsHidden: input.statsHidden !== false,
       version: 1,
       createdAt: input.now,
       updatedAt: input.now,
@@ -62,6 +80,18 @@ export class CharacterSheet {
     return this.props.data;
   }
 
+  get hidden(): boolean {
+    return this.props.hidden;
+  }
+
+  get nameHidden(): boolean {
+    return this.props.nameHidden;
+  }
+
+  get statsHidden(): boolean {
+    return this.props.statsHidden;
+  }
+
   get version(): number {
     return this.props.version;
   }
@@ -78,14 +108,7 @@ export class CharacterSheet {
     return this.props.ownerId === userId;
   }
 
-  edit(
-    changes: {
-      data?: unknown;
-      kind?: SheetKind;
-      ownerId?: string | null;
-    },
-    now: Date,
-  ): CharacterSheet {
+  edit(changes: SheetEdit, now: Date): CharacterSheet {
     return new CharacterSheet({
       ...this.props,
       data:
@@ -95,6 +118,9 @@ export class CharacterSheet {
       kind: changes.kind ?? this.props.kind,
       ownerId:
         changes.ownerId === undefined ? this.props.ownerId : changes.ownerId,
+      hidden: changes.hidden ?? this.props.hidden,
+      nameHidden: changes.nameHidden ?? this.props.nameHidden,
+      statsHidden: changes.statsHidden ?? this.props.statsHidden,
       version: this.props.version + 1,
       updatedAt: now,
     });

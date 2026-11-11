@@ -23,6 +23,9 @@ function toDomain(row: SheetOrmEntity): CharacterSheet {
     ownerId: row.ownerId,
     kind: row.kind,
     data: readData(row),
+    hidden: row.hidden,
+    nameHidden: row.nameHidden,
+    statsHidden: row.statsHidden,
     version: row.version,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -36,6 +39,9 @@ function toOrm(sheet: CharacterSheet): SheetOrmEntity {
   row.kind = sheet.kind;
   row.name = sheet.name;
   row.data = sheet.data;
+  row.hidden = sheet.hidden;
+  row.nameHidden = sheet.nameHidden;
+  row.statsHidden = sheet.statsHidden;
   row.version = sheet.version;
   row.createdAt = sheet.createdAt;
   row.updatedAt = sheet.updatedAt;

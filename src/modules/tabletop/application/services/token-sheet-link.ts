@@ -9,7 +9,7 @@ import { InvalidTokenError } from '../../domain/errors/invalid-token.error';
 
 export type SheetIdentity = Pick<
   TokenDetails,
-  'label' | 'kind' | 'sex' | 'ownerId'
+  'label' | 'kind' | 'sex' | 'ownerId' | 'hidden' | 'nameHidden'
 >;
 
 export function sheetIdentity(sheet: SheetView): SheetIdentity {
@@ -22,6 +22,8 @@ export function sheetIdentity(sheet: SheetView): SheetIdentity {
     kind: sheet.kind,
     sex,
     ownerId: sheet.ownerId,
+    hidden: sheet.hidden,
+    nameHidden: sheet.nameHidden,
   };
 }
 
@@ -33,7 +35,9 @@ export function matchesIdentity(
     details.label === identity.label &&
     details.kind === identity.kind &&
     details.sex === identity.sex &&
-    details.ownerId === identity.ownerId
+    details.ownerId === identity.ownerId &&
+    details.hidden === identity.hidden &&
+    details.nameHidden === identity.nameHidden
   );
 }
 

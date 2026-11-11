@@ -12,8 +12,11 @@ import {
 import { SheetRepository } from '../../domain/repositories/sheet.repository';
 import type { SheetKind } from '../../domain/value-objects/sheet-data';
 import {
+  publicStats,
   sameIdentity,
+  sameStats,
   type SheetChange,
+  type SheetStats,
   type SheetView,
   toSheetView,
 } from '../dtos/sheet-view';
@@ -21,22 +24,37 @@ import {
 export const SHEETS_PER_PLAYER = 5;
 export const SHEETS_PER_TABLE = 200;
 
-export interface CreateSheetInput {
+export interface SheetAssignment {
   kind?: SheetKind;
   ownerId?: string | null;
+  hidden?: boolean;
+  nameHidden?: boolean;
+  statsHidden?: boolean;
+}
+
+export interface CreateSheetInput extends SheetAssignment {
   data: unknown;
 }
 
-export interface UpdateSheetInput {
+export interface UpdateSheetInput extends SheetAssignment {
   id: string;
-  kind?: SheetKind;
-  ownerId?: string | null;
   data?: unknown;
+}
+
+function assigns(input: SheetAssignment): boolean {
+  return (
+    input.kind !== undefined ||
+    input.ownerId !== undefined ||
+    input.hidden !== undefined ||
+    input.nameHidden !== undefined ||
+    input.statsHidden !== undefined
+  );
 }
 
 export interface SheetRemoval {
   id: string;
   ownerId: string | null;
+  wasPublic: boolean;
 }
 
 @Injectable()
@@ -75,10 +93,7 @@ export class CreateSheetUseCase {
     input: CreateSheetInput,
   ): Promise<SheetView> {
     const isMaster = SheetPolicy.canAssign(actor);
-    if (
-      !isMaster &&
-      (input.kind !== undefined || input.ownerId !== undefined)
-    ) {
+    if (!isMaster && assigns(input)) {
       SheetPolicy.assertCanAssign(actor);
     }
     const ownerId = isMaster ? (input.ownerId ?? null) : actor.id;
@@ -89,6 +104,9 @@ export class CreateSheetUseCase {
       ownerId,
       kind: isMaster ? (input.kind ?? 'agent') : 'agent',
       data: input.data,
+      hidden: isMaster && input.hidden === true,
+      nameHidden: isMaster && input.nameHidden === true,
+      statsHidden: !isMaster || input.statsHidden !== false,
       now: new Date(),
     });
 
@@ -126,7 +144,7 @@ export class UpdateSheetUseCase {
     if (!sheet || !SheetPolicy.canEdit(actor, sheet)) {
       throw new SheetNotFoundError();
     }
-    if (input.kind !== undefined || input.ownerId !== undefined) {
+    if (assigns(input)) {
       SheetPolicy.assertCanAssign(actor);
     }
     if (input.ownerId !== undefined && input.ownerId !== sheet.ownerId) {
@@ -134,15 +152,24 @@ export class UpdateSheetUseCase {
     }
 
     const updated = sheet.edit(
-      { data: input.data, kind: input.kind, ownerId: input.ownerId },
+      {
+        data: input.data,
+        kind: input.kind,
+        ownerId: input.ownerId,
+        hidden: input.hidden,
+        nameHidden: input.nameHidden,
+        statsHidden: input.statsHidden,
+      },
       new Date(),
     );
     await this.sheets.save(updated);
     const view = toSheetView(updated);
+    const before = toSheetView(sheet);
     return {
       sheet: view,
       previousOwnerId: sheet.ownerId,
-      identityChanged: !sameIdentity(toSheetView(sheet), view),
+      identityChanged: !sameIdentity(before, view),
+      statsChanged: !sameStats(before, view),
     };
   }
 }
@@ -157,7 +184,23 @@ export class DeleteSheetUseCase {
       throw new SheetNotFoundError();
     }
     await this.sheets.delete(id);
-    return { id, ownerId: sheet.ownerId };
+    return {
+      id,
+      ownerId: sheet.ownerId,
+      wasPublic: publicStats(toSheetView(sheet)) !== null,
+    };
+  }
+}
+
+@Injectable()
+export class ListSheetStatsUseCase {
+  constructor(private readonly sheets: SheetRepository) {}
+
+  async execute(): Promise<SheetStats[]> {
+    const sheets = await this.sheets.findAll();
+    return sheets
+      .map((sheet) => publicStats(toSheetView(sheet)))
+      .filter((stats): stats is SheetStats => stats !== null);
   }
 }
 

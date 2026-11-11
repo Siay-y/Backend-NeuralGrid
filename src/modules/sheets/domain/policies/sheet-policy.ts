@@ -19,7 +19,7 @@ export const SheetPolicy = {
   assertCanAssign(actor: SheetActor): void {
     if (!SheetPolicy.canAssign(actor)) {
       throw new SheetForbiddenError(
-        'Só o mestre muda o tipo ou o dono de uma ficha',
+        'Só o mestre muda o tipo, o dono ou a visibilidade de uma ficha',
       );
     }
   },

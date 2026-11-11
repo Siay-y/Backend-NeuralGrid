@@ -21,10 +21,14 @@ import { ListRecentMessagesUseCase } from '../../../chat/application/use-cases/l
 import { RollDiceUseCase } from '../../../chat/application/use-cases/roll-dice.use-case';
 import { SendMessageUseCase } from '../../../chat/application/use-cases/send-message.use-case';
 import { AuthenticateAccessTokenUseCase } from '../../../auth/application/use-cases/authenticate-access-token.use-case';
-import type { SheetView } from '../../../sheets/application/dtos/sheet-view';
+import {
+  publicStats,
+  type SheetView,
+} from '../../../sheets/application/dtos/sheet-view';
 import {
   CreateSheetUseCase,
   DeleteSheetUseCase,
+  ListSheetStatsUseCase,
   ListSheetsUseCase,
   type SheetRemoval,
   UpdateSheetUseCase,
@@ -128,6 +132,7 @@ export class TableGateway
     private readonly eraseDrawings: EraseDrawingsUseCase,
     private readonly clearDrawings: ClearDrawingsUseCase,
     private readonly listSheets: ListSheetsUseCase,
+    private readonly listSheetStats: ListSheetStatsUseCase,
     private readonly createSheet: CreateSheetUseCase,
     private readonly updateSheet: UpdateSheetUseCase,
     private readonly deleteSheet: DeleteSheetUseCase,
@@ -168,13 +173,15 @@ export class TableGateway
 
     try {
       const actor = { id: user.id, role: user.role };
-      const [tokens, users, messages, drawings, sheets] = await Promise.all([
-        this.listTokens.execute(actor),
-        this.listUsers.execute(),
-        this.listMessages.execute(actor),
-        this.listDrawings.execute(),
-        this.listSheets.execute(actor),
-      ]);
+      const [tokens, users, messages, drawings, sheets, sheetStats] =
+        await Promise.all([
+          this.listTokens.execute(actor),
+          this.listUsers.execute(),
+          this.listMessages.execute(actor),
+          this.listDrawings.execute(),
+          this.listSheets.execute(actor),
+          this.listSheetStats.execute(),
+        ]);
       socket.emit(TableServerEvent.Snapshot, {
         you: user,
         tokens,
@@ -187,6 +194,7 @@ export class TableGateway
         messages,
         drawings,
         sheets,
+        sheetStats,
       });
     } catch (error) {
       this.logger.error(error instanceof Error ? error.stack : String(error));
@@ -417,6 +425,10 @@ export class TableGateway
         TableServerEvent.SheetCreated,
         sheet,
       );
+      const stats = publicStats(sheet);
+      if (stats) {
+        this.server.emit(TableServerEvent.SheetStats, { id: sheet.id, stats });
+      }
       return sheet;
     });
   }
@@ -428,7 +440,7 @@ export class TableGateway
   ): Promise<WsResult<SheetView>> {
     return this.run(socket, async (actor) => {
       const dto = await parsePayload(UpdateSheetDto, body);
-      const { sheet, previousOwnerId, identityChanged } =
+      const { sheet, previousOwnerId, identityChanged, statsChanged } =
         await this.updateSheet.execute(actor, dto);
       if (previousOwnerId !== null && previousOwnerId !== sheet.ownerId) {
         this.server
@@ -440,9 +452,19 @@ export class TableGateway
         TableServerEvent.SheetUpdated,
         sheet,
       );
+      if (statsChanged) {
+        this.server.emit(TableServerEvent.SheetStats, {
+          id: sheet.id,
+          stats: publicStats(sheet),
+        });
+      }
       if (identityChanged) {
-        for (const token of await this.syncSheetTokens.execute(sheet)) {
-          this.publishToken(TableServerEvent.TokenUpdated, token, token.hidden);
+        for (const change of await this.syncSheetTokens.execute(sheet)) {
+          this.publishToken(
+            TableServerEvent.TokenUpdated,
+            change.token,
+            change.wasHidden,
+          );
         }
       }
       return sheet;
@@ -460,6 +482,12 @@ export class TableGateway
       this.sheetAudience(removal.ownerId).emit(TableServerEvent.SheetDeleted, {
         id: removal.id,
       });
+      if (removal.wasPublic) {
+        this.server.emit(TableServerEvent.SheetStats, {
+          id: removal.id,
+          stats: null,
+        });
+      }
       return removal;
     });
   }

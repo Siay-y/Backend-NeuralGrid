@@ -12,6 +12,8 @@ import { AddTokenIconAndVisibility1764547200000 } from './migrations/17645472000
 import { AddTokenSexAndNameVisibility1765152000000 } from './migrations/1765152000000-add-token-sex-and-name-visibility';
 import { CreateDrawings1765756800000 } from './migrations/1765756800000-create-drawings';
 import { CreateCharacterSheets1766361600000 } from './migrations/1766361600000-create-character-sheets';
+import { AddSheetVisibility1766966400000 } from './migrations/1766966400000-add-sheet-visibility';
+import { AddSheetStatsVisibility1767571200000 } from './migrations/1767571200000-add-sheet-stats-visibility';
 
 export interface DatabaseSettings {
   url: string;
@@ -55,6 +57,8 @@ export function buildDataSourceOptions(
       AddTokenSexAndNameVisibility1765152000000,
       CreateDrawings1765756800000,
       CreateCharacterSheets1766361600000,
+      AddSheetVisibility1766966400000,
+      AddSheetStatsVisibility1767571200000,
     ],
     migrationsTableName: 'typeorm_migrations',
     uuidExtension: 'pgcrypto',

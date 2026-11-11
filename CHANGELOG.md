@@ -6,6 +6,24 @@ do roadmap e o patch a cada melhoria ou correção. As notas para os jogadores
 ficam na aba Atualizações do
 [frontend](https://github.com/Siay-y/Frontend-NeuralGrid).
 
+## 0.4.1 (2026-11-11)
+
+Destreza e visibilidade controlada pela ficha.
+
+### Novo
+
+- Atributo `dexterity` (Destreza), de 0 a 30, também aceito como atributo de
+  ataque das armas. Fichas salvas antes dele leem 10.
+- Campos `hidden` e `nameHidden` na ficha, que só o mestre muda (migration
+  `AddSheetVisibility`). O token ligado recebe as duas flags da ficha na
+  criação, na edição e ao ligar, e esconder pela ficha tira o token da tela dos
+  jogadores na hora.
+- Campo `statsHidden` na ficha, ligado por padrão e só o mestre muda (migration
+  `AddSheetStatsVisibility`). Com ele desligado, e a ficha sem nome ou token
+  escondido, a mesa recebe só o HP e a Defesa dela: no snapshot (`sheetStats`)
+  e no evento `sheet:stats`, que leva `null` quando volta a esconder ou a ficha
+  é apagada. O resto da ficha continua só com o mestre e o dono.
+
 ## 0.4.0 (2026-11-10)
 
 Etapa 4: fichas de personagem.
