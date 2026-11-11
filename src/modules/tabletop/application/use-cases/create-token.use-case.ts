@@ -11,6 +11,7 @@ import type { TokenKind } from '../../domain/value-objects/token-kind';
 import type { TokenSex } from '../../domain/value-objects/token-sex';
 import { toTokenView, TokenView } from '../dtos/token-view';
 import { TokenOwnerValidator } from '../services/token-owner-validator';
+import { TokenSheetLink } from '../services/token-sheet-link';
 
 export interface CreateTokenInput {
   label: string;
@@ -20,6 +21,7 @@ export interface CreateTokenInput {
   hidden: boolean;
   nameHidden: boolean;
   ownerId: string | null;
+  sheetId: string | null;
   col: number;
   row: number;
   size: number;
@@ -30,6 +32,7 @@ export class CreateTokenUseCase {
   constructor(
     private readonly tokens: TokenRepository,
     private readonly owners: TokenOwnerValidator,
+    private readonly sheets: TokenSheetLink,
   ) {}
 
   async execute(
@@ -37,9 +40,15 @@ export class CreateTokenUseCase {
     input: CreateTokenInput,
   ): Promise<TokenView> {
     TokenPolicy.assertCanManage(actor);
-    await this.owners.assertValid(input.ownerId);
+    const linked = await this.sheets.identity(input.sheetId);
+    const details = { ...input, ...linked };
+    await this.owners.assertValid(details.ownerId);
 
-    const token = Token.create({ id: randomUUID(), ...input, now: new Date() });
+    const token = Token.create({
+      id: randomUUID(),
+      ...details,
+      now: new Date(),
+    });
     await this.tokens.save(token);
     return toTokenView(token);
   }

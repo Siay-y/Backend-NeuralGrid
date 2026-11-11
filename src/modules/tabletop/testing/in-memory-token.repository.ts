@@ -12,6 +12,12 @@ export class InMemoryTokenRepository extends TokenRepository {
     return Promise.resolve(this.tokens.get(id) ?? null);
   }
 
+  findBySheet(sheetId: string): Promise<Token[]> {
+    return Promise.resolve(
+      [...this.tokens.values()].filter((token) => token.sheetId === sheetId),
+    );
+  }
+
   save(token: Token): Promise<void> {
     this.tokens.set(token.id, token);
     return Promise.resolve();

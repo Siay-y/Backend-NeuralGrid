@@ -10,6 +10,7 @@ const base = {
   hidden: false,
   nameHidden: false,
   ownerId: 'player-1',
+  sheetId: null,
   col: 2,
   row: -3,
   size: 1,

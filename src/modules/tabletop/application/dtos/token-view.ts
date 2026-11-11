@@ -16,6 +16,7 @@ export interface TokenView {
   hidden: boolean;
   nameHidden: boolean;
   ownerId: string | null;
+  sheetId: string | null;
   col: number;
   row: number;
   size: number;
@@ -32,6 +33,7 @@ export function toTokenView(token: Token): TokenView {
     hidden: token.hidden,
     nameHidden: token.nameHidden,
     ownerId: token.ownerId,
+    sheetId: token.sheetId,
     col: token.col,
     row: token.row,
     size: token.size,
@@ -49,6 +51,7 @@ export function viewForPlayers(view: TokenView): TokenView {
     kind: MASKED_TOKEN_KIND,
     icon: null,
     sex: null,
+    sheetId: null,
   };
 }
 

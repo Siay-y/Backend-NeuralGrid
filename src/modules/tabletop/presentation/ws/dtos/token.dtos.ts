@@ -43,6 +43,7 @@ const HIDDEN_MESSAGE = 'A visibilidade precisa ser verdadeiro ou falso';
 const SEX_MESSAGE = 'O sexo precisa ser feminino, masculino, outro ou nulo';
 const NAME_HIDDEN_MESSAGE = 'Esconder o nome precisa ser verdadeiro ou falso';
 const ID_MESSAGE = 'Identificador de token inválido';
+const SHEET_MESSAGE = 'A ficha precisa ser um identificador válido ou nula';
 
 export class TokenIdDto {
   @IsUUID('4', { message: ID_MESSAGE })
@@ -93,6 +94,12 @@ export class CreateTokenDto {
   @IsOptional()
   @IsUUID('4', { message: OWNER_MESSAGE })
   ownerId?: string | null;
+
+  @ValidateIf(
+    (dto: CreateTokenDto) => dto.sheetId !== null && dto.sheetId !== undefined,
+  )
+  @IsUUID('4', { message: SHEET_MESSAGE })
+  sheetId?: string | null;
 
   @IsInt({ message: POSITION_MESSAGE })
   @Min(-GRID_LIMIT, { message: POSITION_MESSAGE })
@@ -147,6 +154,12 @@ export class UpdateTokenDto extends TokenIdDto {
   )
   @IsUUID('4', { message: OWNER_MESSAGE })
   ownerId?: string | null;
+
+  @ValidateIf(
+    (dto: UpdateTokenDto) => dto.sheetId !== null && dto.sheetId !== undefined,
+  )
+  @IsUUID('4', { message: SHEET_MESSAGE })
+  sheetId?: string | null;
 
   @IsOptional()
   @IsInt({ message: SIZE_MESSAGE })

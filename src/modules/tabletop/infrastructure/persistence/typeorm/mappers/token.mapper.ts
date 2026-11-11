@@ -12,6 +12,7 @@ export const TokenMapper = {
       hidden: row.hidden,
       nameHidden: row.nameHidden,
       ownerId: row.ownerId,
+      sheetId: row.sheetId,
       col: row.col,
       row: row.row,
       size: row.size,
@@ -31,6 +32,7 @@ export const TokenMapper = {
     row.hidden = token.hidden;
     row.nameHidden = token.nameHidden;
     row.ownerId = token.ownerId;
+    row.sheetId = token.sheetId;
     row.col = token.col;
     row.row = token.row;
     row.size = token.size;

@@ -14,6 +14,9 @@ export const TableClientEvent = {
   ClearDrawings: 'drawing:clear',
   MoveRuler: 'ruler:move',
   ClearRuler: 'ruler:clear',
+  CreateSheet: 'sheet:create',
+  UpdateSheet: 'sheet:update',
+  DeleteSheet: 'sheet:delete',
 } as const;
 
 export const TableServerEvent = {
@@ -29,6 +32,9 @@ export const TableServerEvent = {
   DrawingsErased: 'drawing:erased',
   RulerMoved: 'ruler:moved',
   RulerCleared: 'ruler:cleared',
+  SheetCreated: 'sheet:created',
+  SheetUpdated: 'sheet:updated',
+  SheetDeleted: 'sheet:deleted',
   SessionExpired: 'session:expired',
 } as const;
 

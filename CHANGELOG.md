@@ -6,6 +6,38 @@ do roadmap e o patch a cada melhoria ou correção. As notas para os jogadores
 ficam na aba Atualizações do
 [frontend](https://github.com/Siay-y/Frontend-NeuralGrid).
 
+## 0.4.0 (2026-11-10)
+
+Etapa 4: fichas de personagem.
+
+### Novo
+
+- Módulo `sheets`, com a tabela `character_sheets`: dono, tipo (`token_kind`),
+  nome e os dados da ficha em `jsonb`, validados no domínio. Campos fora do
+  formato são descartados e valores fora das regras são recusados.
+- Ficha em cinco seções: identidade (nome, codinome, idade, gênero e classe
+  livre), status (HP, XP, movimento, dinheiro, armadura e carga máxima), sete
+  atributos de 0 a 30, onze habilidades com bônus livre de −20 a +20, e
+  equipamentos (armas com atributo, bônus e dano em dados,
+  armaduras com defesa e bônus, itens com quantidade e peso).
+- Fichas gravadas num formato antigo são lidas com os valores padrão em vez de
+  derrubar a mesa.
+- Eventos `sheet:create`, `sheet:update` e `sheet:delete`. A atualização troca
+  só as seções enviadas. `sheet:created`, `sheet:updated` e `sheet:deleted`
+  vão só para o mestre e para o dono; quem perde a ficha recebe
+  `sheet:deleted`.
+- Jogadores criam fichas próprias, até 5 cada, e só veem as suas. O mestre vê
+  todas, cria NPCs e ameaças e muda o tipo e o dono. A mesa aceita até 200
+  fichas.
+- Fichas no snapshot, conforme quem conectou.
+- Campo `sheetId` no token, validado na criação e na edição. Apagar a ficha
+  deixa o token sem vínculo. Jogadores não recebem o vínculo de um token com
+  nome oculto.
+- A ficha manda no token ligado: nome (codinome ou nome), tipo, sexo e dono vêm
+  dela na criação, na edição e ao ligar. Quando a ficha muda essas informações,
+  os tokens ligados são atualizados e a mesa recebe `token:updated`.
+- Migration `CreateCharacterSheets`, aplicada sozinha no boot.
+
 ## 0.3.3 (2026-11-10)
 
 Desenhos, régua, token incógnito e limite de envios.
