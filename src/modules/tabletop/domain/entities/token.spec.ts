@@ -9,6 +9,7 @@ const base = {
   sex: null,
   hidden: false,
   nameHidden: false,
+  emitsLight: true,
   ownerId: 'player-1',
   sheetId: null,
   col: 2,

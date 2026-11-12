@@ -19,6 +19,7 @@ import { AddSheetVisibility1766966400000 } from './migrations/1766966400000-add-
 import { AddSheetStatsVisibility1767571200000 } from './migrations/1767571200000-add-sheet-stats-visibility';
 import { CreateMaps1768176000000 } from './migrations/1768176000000-create-maps';
 import { CreateTableSettings1768780800000 } from './migrations/1768780800000-create-table-settings';
+import { AddTokenLight1768867200000 } from './migrations/1768867200000-add-token-light';
 
 export interface DatabaseSettings {
   url: string;
@@ -69,6 +70,7 @@ export function buildDataSourceOptions(
       AddSheetStatsVisibility1767571200000,
       CreateMaps1768176000000,
       CreateTableSettings1768780800000,
+      AddTokenLight1768867200000,
     ],
     migrationsTableName: 'typeorm_migrations',
     uuidExtension: 'pgcrypto',

@@ -123,8 +123,9 @@ linha só (`id = 1`):
 | `fog:changed` | todos, do servidor | `{ fog: { enabled, radius } }` |
 
 O snapshot traz `fog`. O servidor só guarda a configuração: cada navegador
-acende uma luz no centro de cada token que tem dono, com o alcance escolhido, e
-escurece o resto do tabuleiro para os jogadores.
+acende uma luz no centro de cada token que tem dono e `emitsLight`, com o
+alcance escolhido, e escurece o resto do tabuleiro para os jogadores. Um token
+com `emitsLight: false` fica no escuro e só aparece perto da luz de outro.
 
 A névoa esconde o que o navegador desenha, não os dados. A imagem do mapa e os
 tokens no escuro continuam chegando ao jogador. Para um segredo de verdade, o

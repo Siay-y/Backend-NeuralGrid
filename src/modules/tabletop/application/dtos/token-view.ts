@@ -15,6 +15,7 @@ export interface TokenView {
   sex: TokenSex | null;
   hidden: boolean;
   nameHidden: boolean;
+  emitsLight: boolean;
   ownerId: string | null;
   sheetId: string | null;
   col: number;
@@ -32,6 +33,7 @@ export function toTokenView(token: Token): TokenView {
     sex: token.sex,
     hidden: token.hidden,
     nameHidden: token.nameHidden,
+    emitsLight: token.emitsLight,
     ownerId: token.ownerId,
     sheetId: token.sheetId,
     col: token.col,

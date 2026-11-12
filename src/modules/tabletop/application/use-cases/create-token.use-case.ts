@@ -20,6 +20,7 @@ export interface CreateTokenInput {
   sex: TokenSex | null;
   hidden: boolean;
   nameHidden: boolean;
+  emitsLight: boolean;
   ownerId: string | null;
   sheetId: string | null;
   col: number;

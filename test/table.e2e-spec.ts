@@ -342,6 +342,7 @@ describe('Table gateway (e2e)', () => {
         icon: 'raven',
         sex: 'male',
         nameHidden: true,
+        emitsLight: false,
         ownerId: sessions.jogador1.userId,
         col: 6,
         row: 6,
@@ -365,8 +366,9 @@ describe('Table gateway (e2e)', () => {
     const late = await open(sessions.jogador2.token);
     const snapshotLabel = late.snapshot.tokens.find(
       (token) => token.id === created.data!.id,
-    ) as { label?: string } | undefined;
+    ) as { label?: string; emitsLight?: boolean } | undefined;
     expect(snapshotLabel?.label).toBe('???');
+    expect(snapshotLabel?.emitsLight).toBe(false);
 
     const playerSeesName = next<Record<string, unknown>>(
       player.socket,

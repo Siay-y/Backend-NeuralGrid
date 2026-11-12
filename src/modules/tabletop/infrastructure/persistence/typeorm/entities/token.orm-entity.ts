@@ -55,6 +55,9 @@ export class TokenOrmEntity {
   @Column({ name: 'name_hidden', type: 'boolean', default: false })
   nameHidden: boolean;
 
+  @Column({ name: 'emits_light', type: 'boolean', default: true })
+  emitsLight: boolean;
+
   @Index('ix_tokens_owner_id')
   @Column({ name: 'owner_id', type: 'uuid', nullable: true })
   ownerId: string | null;

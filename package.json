@@ -1,6 +1,6 @@
 {
   "name": "backend-neural-grid",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "API do NeuralGrid: autenticação, mesa e fichas do Virtual Tabletop privado.",
   "author": "Luiz Henrique Porfírio Santos",
   "private": true,
