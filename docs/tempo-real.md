@@ -48,6 +48,14 @@ fire-and-forget.
 | `chat:send` | todos | `{ text, visibility, recipientId? }` | mensagem gravada |
 | `dice:roll` | todos | `{ expression, label?, visibility, recipientId? }` | rolagem gravada |
 | `chat:clear` | mestre | nenhum | `{ by, removed }` |
+| `combat:join` | mestre | `{ tokenIds }` | combate |
+| `combat:leave` | mestre | `{ tokenId }` | combate |
+| `combat:update` | mestre | `{ tokenId, initiative?, hidden? }` | combate |
+| `combat:roll` | mestre | `{ tokenIds? }` | combate |
+| `combat:start` | mestre | nenhum | combate |
+| `combat:step` | mestre | `{ step: 1 ou -1, round?, turnId? }` | combate |
+| `combat:pass` | dono do token da vez | `{ tokenId }` | combate na visão de quem pediu |
+| `combat:end` | mestre | nenhum | combate vazio |
 
 ### Servidor para cliente
 
@@ -62,6 +70,7 @@ fire-and-forget.
 | `session:expired` | o JWT venceu | nenhum |
 | `chat:message` | mensagem ou rolagem nova que você pode ver | mensagem |
 | `chat:cleared` | o mestre limpou o chat | `{ by, removed }` |
+| `combat:changed` | o combate mudou | `{ combat }`, na visão de quem recebe |
 
 `members` traz só `id`, `displayName` e `role`. O nome de login e o hash nunca
 saem do servidor.
@@ -76,6 +85,8 @@ saem do servidor.
 | `TOKEN_NOT_FOUND` | o token não existe mais |
 | `INVALID_DICE` | expressão de dados fora da gramática ou dos limites |
 | `CHAT_FORBIDDEN` | só o mestre limpa o chat de toda a mesa |
+| `COMBAT_FORBIDDEN` | só o mestre conduz o combate |
+| `INVALID_COMBAT` | iniciativa fora de -99 a 999, mais de 40 participantes, token fora do combate ou combate sem começar |
 | `INVALID_MESSAGE` | texto vazio ou longo demais, sussurro sem destinatário ou para si mesmo |
 | `RATE_LIMITED` | eventos rápidos demais neste socket |
 | `INTERNAL` | erro inesperado, registrado no log do servidor |
@@ -131,6 +142,31 @@ fez. O nome real só chega aos mestres.
 O campo `version` deixa o cliente descartar uma atualização mais velha que
 chegue fora de ordem e desfazer só o próprio movimento otimista que foi
 recusado.
+
+## Combate
+
+Um combate por mesa, guardado numa linha da tabela `combat` (migration
+`CreateCombat`): `round`, `turn_token_id` e `combatants` em JSONB, cada um com
+`tokenId`, `initiative` e `hidden`. Só o mestre muda o combate, e cada mudança
+manda `combat:changed` para todos.
+
+| Regra | Como funciona |
+| --- | --- |
+| Ordem | iniciativa maior primeiro; empate fica na ordem de entrada; sem valor vai para o fim |
+| Rolar | `combat:roll` sorteia d20 + Mod de Agilidade da ficha ligada ao token pelo `RollDiceUseCase`, e cada rolagem vira uma mensagem "Iniciativa · nome" no chat: pública, ou só para os mestres quando o participante ou o token está oculto. Sem `tokenIds`, rola só quem tem ficha e ainda não tem valor. Token sem ficha recebe o valor digitado |
+| Começar | rodada 1, a vez fica com o primeiro da ordem |
+| Turno | `combat:step` com 1 passa a vez. Com `round` e `turnId`, o servidor recusa (`INVALID_COMBAT`) se a vez já mudou, para dois cliques ao mesmo tempo não pularem ninguém; depois do último, volta ao primeiro e soma uma rodada. Com -1 volta, sem passar da rodada 1 |
+| Finalizar turno | `combat:pass` passa a vez como `combat:step` com 1, mas só aceita o dono de um token visível que está com a vez agora (`COMBAT_FORBIDDEN` para outro token, `INVALID_COMBAT` se a vez já passou) |
+| Sair | se quem sai está com a vez, ela passa para o próximo; sem ninguém, o combate zera |
+| Token removido | sai do combate na hora, pela mesma regra, e `combat:changed` só é enviado se ele estava na luta |
+| Ordem das mudanças | `CombatTracker` aplica uma mudança de cada vez, em fila, para nenhuma se perder quando chegam juntas |
+
+**Quem vê.** Ao entrar, o participante nasce oculto quando o token está oculto
+ou quando a névoa está ligada e o token não tem luz própria. O mestre revela
+com `hidden: false`. O jogador recebe só os participantes visíveis com token
+visível, e `turnId` vira `null` quando a vez é de alguém que ele não vê. O
+mestre recebe tudo. Mudar `hidden` de um token que está no combate reenvia o
+combate.
 
 ## Chat e dados
 

@@ -82,6 +82,23 @@ import { ListTokensUseCase } from '../../application/use-cases/list-tokens.use-c
 import { MoveTokenUseCase } from '../../application/use-cases/move-token.use-case';
 import { SyncSheetTokensUseCase } from '../../application/use-cases/sync-sheet-tokens.use-case';
 import { UpdateTokenUseCase } from '../../application/use-cases/update-token.use-case';
+import {
+  type CombatView,
+  type CombatViews,
+  viewForActor,
+} from '../../application/dtos/combat-view';
+import {
+  DropFromCombatUseCase,
+  EditCombatantUseCase,
+  EndCombatUseCase,
+  GetCombatUseCase,
+  JoinCombatUseCase,
+  LeaveCombatUseCase,
+  PassTurnUseCase,
+  RollInitiativeUseCase,
+  StartCombatUseCase,
+  StepTurnUseCase,
+} from '../../application/use-cases/combat-use-cases';
 import type { TableActor } from '../../domain/policies/token-policy';
 import { RollDiceDto, SendMessageDto } from './dtos/chat.dtos';
 import {
@@ -97,6 +114,13 @@ import {
   UpdateAreaDto,
   UpdateFogDto,
 } from './dtos/map.dtos';
+import {
+  CombatantIdDto,
+  CombatTokensDto,
+  RollInitiativeDto,
+  StepTurnDto,
+  UpdateCombatantDto,
+} from './dtos/combat.dtos';
 import { CreateSheetDto, SheetIdDto, UpdateSheetDto } from './dtos/sheet.dtos';
 import {
   CreateTokenDto,
@@ -197,6 +221,16 @@ export class TableGateway
     private readonly getFogMemory: GetFogMemoryUseCase,
     private readonly exploreFog: ExploreFogUseCase,
     private readonly forgetFog: ForgetFogUseCase,
+    private readonly getCombat: GetCombatUseCase,
+    private readonly joinCombat: JoinCombatUseCase,
+    private readonly leaveCombat: LeaveCombatUseCase,
+    private readonly editCombatant: EditCombatantUseCase,
+    private readonly rollInitiative: RollInitiativeUseCase,
+    private readonly startCombat: StartCombatUseCase,
+    private readonly stepTurn: StepTurnUseCase,
+    private readonly passOwnTurn: PassTurnUseCase,
+    private readonly endCombat: EndCombatUseCase,
+    private readonly dropFromCombat: DropFromCombatUseCase,
   ) {}
 
   afterInit(namespace: Namespace): void {
@@ -257,6 +291,7 @@ export class TableGateway
         scene,
         fog,
         fogMemory,
+        combat,
       ] = await Promise.all([
         this.listTokens.execute(actor),
         this.listUsers.execute(),
@@ -268,6 +303,7 @@ export class TableGateway
         this.getScene.execute(),
         this.getFog.execute(),
         this.getFogMemory.execute(),
+        this.getCombat.execute(),
       ]);
       socket.emit(TableServerEvent.Snapshot, {
         you: user,
@@ -286,6 +322,7 @@ export class TableGateway
         scene: user.role === 'master' ? scene : toPlayerScene(scene),
         fog,
         fogMemory,
+        combat: viewForActor(combat, actor),
       });
     } catch (error) {
       this.logger.error(error instanceof Error ? error.stack : String(error));
@@ -347,6 +384,9 @@ export class TableGateway
       const { token, wasHidden } = await this.updateToken.execute(actor, dto);
       this.publishToken(TableServerEvent.TokenUpdated, token, wasHidden);
       await this.explore([{ token, from: null }]);
+      if (token.hidden !== wasHidden) {
+        await this.refreshCombat([token.id]);
+      }
       return token;
     });
   }
@@ -389,6 +429,10 @@ export class TableGateway
       const { id, wasHidden } = await this.deleteToken.execute(actor, dto.id);
       const audience = wasHidden ? this.server.to(MASTERS_ROOM) : this.server;
       audience.emit(TableServerEvent.TokenDeleted, { id });
+      const combat = await this.dropFromCombat.execute([id]);
+      if (combat) {
+        this.publishCombat(combat);
+      }
       return { id };
     });
   }
@@ -554,13 +598,19 @@ export class TableGateway
         });
       }
       if (identityChanged) {
-        for (const change of await this.syncSheetTokens.execute(sheet)) {
+        const changes = await this.syncSheetTokens.execute(sheet);
+        for (const change of changes) {
           this.publishToken(
             TableServerEvent.TokenUpdated,
             change.token,
             change.wasHidden,
           );
         }
+        await this.refreshCombat(
+          changes
+            .filter(({ token, wasHidden }) => token.hidden !== wasHidden)
+            .map(({ token }) => token.id),
+        );
       }
       return sheet;
     });
@@ -685,6 +735,133 @@ export class TableGateway
       });
       return memory;
     });
+  }
+
+  @SubscribeMessage(TableClientEvent.JoinCombat)
+  addToCombat(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<CombatView>> {
+    return this.conduct(socket, async (actor) => {
+      const dto = await parsePayload(CombatTokensDto, body);
+      return this.joinCombat.execute(actor, dto.tokenIds);
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.LeaveCombat)
+  removeFromCombat(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<CombatView>> {
+    return this.conduct(socket, async (actor) => {
+      const dto = await parsePayload(CombatantIdDto, body);
+      return this.leaveCombat.execute(actor, dto.tokenId);
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.UpdateCombatant)
+  editInCombat(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<CombatView>> {
+    return this.conduct(socket, async (actor) => {
+      const { tokenId, initiative, hidden } = await parsePayload(
+        UpdateCombatantDto,
+        body,
+      );
+      return this.editCombatant.execute(actor, tokenId, { initiative, hidden });
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.RollInitiative)
+  rollForCombat(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<CombatView>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(RollInitiativeDto, body);
+      const { views, messages } = await this.rollInitiative.execute(
+        actor,
+        dto.tokenIds ?? null,
+      );
+      messages.forEach((message) => this.deliver(message));
+      this.publishCombat(views);
+      return views.master;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.StartCombat)
+  beginCombat(
+    @ConnectedSocket() socket: TableSocket,
+  ): Promise<WsResult<CombatView>> {
+    return this.conduct(socket, (actor) => this.startCombat.execute(actor));
+  }
+
+  @SubscribeMessage(TableClientEvent.StepTurn)
+  passTurn(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<CombatView>> {
+    return this.conduct(socket, async (actor) => {
+      const dto = await parsePayload(StepTurnDto, body);
+      const expected =
+        dto.round === undefined
+          ? undefined
+          : { round: dto.round, turnId: dto.turnId ?? null };
+      return this.stepTurn.execute(actor, dto.step, expected);
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.PassTurn)
+  endTurn(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<CombatView>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(CombatantIdDto, body);
+      const views = await this.passOwnTurn.execute(actor, dto.tokenId);
+      this.publishCombat(views);
+      return viewForActor(views, actor);
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.EndCombat)
+  finishCombat(
+    @ConnectedSocket() socket: TableSocket,
+  ): Promise<WsResult<CombatView>> {
+    return this.conduct(socket, (actor) => this.endCombat.execute(actor));
+  }
+
+  private conduct(
+    socket: TableSocket,
+    action: (actor: TableActor) => Promise<CombatViews>,
+  ): Promise<WsResult<CombatView>> {
+    return this.run(socket, async (actor) => {
+      const views = await action(actor);
+      this.publishCombat(views);
+      return views.master;
+    });
+  }
+
+  private async refreshCombat(tokenIds: readonly string[]): Promise<void> {
+    if (tokenIds.length === 0) {
+      return;
+    }
+    const views = await this.getCombat.execute();
+    if (
+      views.master.combatants.some(({ tokenId }) => tokenIds.includes(tokenId))
+    ) {
+      this.publishCombat(views);
+    }
+  }
+
+  private publishCombat(views: CombatViews): void {
+    this.server.to(MASTERS_ROOM).emit(TableServerEvent.CombatChanged, {
+      combat: views.master,
+    });
+    this.server
+      .except(MASTERS_ROOM)
+      .emit(TableServerEvent.CombatChanged, { combat: views.players });
   }
 
   private async exploreAll(actor: TableActor): Promise<void> {
