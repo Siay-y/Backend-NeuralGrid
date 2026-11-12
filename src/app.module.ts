@@ -9,6 +9,7 @@ import { buildThrottlerOptions } from './core/security/throttler.options';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/presentation/http/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/presentation/http/guards/roles.guard';
+import { MapsModule } from './modules/maps/maps.module';
 import { TabletopModule } from './modules/tabletop/tabletop.module';
 import { UsersModule } from './modules/users/users.module';
 import { GlobalExceptionFilter } from './shared/presentation/http/filters/global-exception.filter';
@@ -20,6 +21,7 @@ import { GlobalExceptionFilter } from './shared/presentation/http/filters/global
     ThrottlerModule.forRoot(buildThrottlerOptions()),
     UsersModule,
     AuthModule,
+    MapsModule,
     TabletopModule,
   ],
   controllers: [HealthController],

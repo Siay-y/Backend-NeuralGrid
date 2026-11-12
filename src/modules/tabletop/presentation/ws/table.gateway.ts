@@ -33,6 +33,22 @@ import {
   type SheetRemoval,
   UpdateSheetUseCase,
 } from '../../../sheets/application/use-cases/sheet-use-cases';
+import {
+  type MapView,
+  type SceneView,
+  toPlayerScene,
+  toSceneView,
+} from '../../../maps/application/dtos/map-view';
+import { MapEvents } from '../../../maps/application/services/map-events';
+import {
+  ActivateMapUseCase,
+  DeleteMapAreaUseCase,
+  DeleteMapUseCase,
+  GetSceneUseCase,
+  ListMapsUseCase,
+  RenameMapUseCase,
+  UpdateMapAreaUseCase,
+} from '../../../maps/application/use-cases/map-use-cases';
 import { ListUsersUseCase } from '../../../users/application/use-cases/list-users.use-case';
 import {
   type DrawingsErased,
@@ -62,6 +78,12 @@ import {
   DrawingIdsDto,
   RulerDto,
 } from './dtos/drawing.dtos';
+import {
+  ActivateMapDto,
+  MapIdDto,
+  RenameMapDto,
+  UpdateAreaDto,
+} from './dtos/map.dtos';
 import { CreateSheetDto, SheetIdDto, UpdateSheetDto } from './dtos/sheet.dtos';
 import {
   CreateTokenDto,
@@ -138,9 +160,23 @@ export class TableGateway
     private readonly updateSheet: UpdateSheetUseCase,
     private readonly deleteSheet: DeleteSheetUseCase,
     private readonly syncSheetTokens: SyncSheetTokensUseCase,
+    private readonly listMaps: ListMapsUseCase,
+    private readonly getScene: GetSceneUseCase,
+    private readonly renameMap: RenameMapUseCase,
+    private readonly updateArea: UpdateMapAreaUseCase,
+    private readonly activateMap: ActivateMapUseCase,
+    private readonly deleteMap: DeleteMapUseCase,
+    private readonly deleteArea: DeleteMapAreaUseCase,
+    private readonly mapEvents: MapEvents,
   ) {}
 
   afterInit(namespace: Namespace): void {
+    this.mapEvents.onUploaded(({ map, created }) =>
+      this.publishMap(
+        map,
+        created ? TableServerEvent.MapCreated : TableServerEvent.MapUpdated,
+      ),
+    );
     namespace.use((socket: TableSocket, next) => {
       const token: unknown = socket.handshake.auth?.token;
       this.authenticate
@@ -181,15 +217,25 @@ export class TableGateway
 
     try {
       const actor = { id: user.id, role: user.role };
-      const [tokens, users, messages, drawings, sheets, sheetStats] =
-        await Promise.all([
-          this.listTokens.execute(actor),
-          this.listUsers.execute(),
-          this.listMessages.execute(actor),
-          this.listDrawings.execute(),
-          this.listSheets.execute(actor),
-          this.listSheetStats.execute(),
-        ]);
+      const [
+        tokens,
+        users,
+        messages,
+        drawings,
+        sheets,
+        sheetStats,
+        maps,
+        scene,
+      ] = await Promise.all([
+        this.listTokens.execute(actor),
+        this.listUsers.execute(),
+        this.listMessages.execute(actor),
+        this.listDrawings.execute(),
+        this.listSheets.execute(actor),
+        this.listSheetStats.execute(),
+        this.listMaps.execute(actor),
+        this.getScene.execute(),
+      ]);
       socket.emit(TableServerEvent.Snapshot, {
         you: user,
         tokens,
@@ -203,6 +249,8 @@ export class TableGateway
         drawings,
         sheets,
         sheetStats,
+        maps,
+        scene: user.role === 'master' ? scene : toPlayerScene(scene),
       });
     } catch (error) {
       this.logger.error(error instanceof Error ? error.stack : String(error));
@@ -498,6 +546,90 @@ export class TableGateway
       }
       return removal;
     });
+  }
+
+  @SubscribeMessage(TableClientEvent.RenameMap)
+  editMap(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<MapView>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(RenameMapDto, body);
+      const map = await this.renameMap.execute(actor, dto);
+      this.server.to(MASTERS_ROOM).emit(TableServerEvent.MapUpdated, map);
+      return map;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.UpdateArea)
+  editArea(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<MapView>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(UpdateAreaDto, body);
+      const map = await this.updateArea.execute(actor, dto);
+      this.publishMap(map, TableServerEvent.MapUpdated);
+      return map;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.ActivateMap)
+  showMap(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<{ id: string | null }>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(ActivateMapDto, body);
+      const map = await this.activateMap.execute(actor, dto.id);
+      this.publishScene(map ? toSceneView(map) : null);
+      return { id: map?.id ?? null };
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.DeleteMap)
+  removeMap(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<{ id: string }>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(MapIdDto, body);
+      const { id, wasActive } = await this.deleteMap.execute(actor, dto.id);
+      this.server.to(MASTERS_ROOM).emit(TableServerEvent.MapDeleted, { id });
+      if (wasActive) {
+        this.publishScene(null);
+      }
+      return { id };
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.DeleteArea)
+  removeArea(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<MapView>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(MapIdDto, body);
+      const map = await this.deleteArea.execute(actor, dto.id);
+      this.publishMap(map, TableServerEvent.MapUpdated);
+      return map;
+    });
+  }
+
+  private publishMap(map: MapView, event: string): void {
+    this.server.to(MASTERS_ROOM).emit(event, map);
+    if (map.active) {
+      this.publishScene(toSceneView(map));
+    }
+  }
+
+  // Masters see hidden areas faded on their board. Players only ever receive
+  // the visible ones, so a hidden area never reaches their browser.
+  private publishScene(scene: SceneView | null): void {
+    this.server.to(MASTERS_ROOM).emit(TableServerEvent.SceneChanged, { scene });
+    this.server
+      .except(MASTERS_ROOM)
+      .emit(TableServerEvent.SceneChanged, { scene: toPlayerScene(scene) });
   }
 
   private sheetAudience(ownerId: string | null) {
