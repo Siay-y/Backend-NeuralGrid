@@ -107,11 +107,36 @@ O snapshot traz `maps`, vazio para jogadores, e `scene`, filtrada do mesmo jeito
 A cena não leva nome de mapa nem de área, para o título que o mestre deu não
 entregar nada. No tabuleiro do mestre, as áreas ocultas aparecem apagadas.
 
+## Névoa de guerra
+
+A névoa vale para a mesa inteira e fica na tabela `table_settings`, que tem uma
+linha só (`id = 1`):
+
+| Coluna | Conteúdo |
+| --- | --- |
+| `fog_enabled` | se os jogadores enxergam só perto das luzes |
+| `light_radius` | alcance da luz em quadrados, de 2 a 20, 6 por padrão |
+
+| Evento | Quem pode | Payload |
+| --- | --- | --- |
+| `fog:update` | mestre | `{ enabled?, radius? }` |
+| `fog:changed` | todos, do servidor | `{ fog: { enabled, radius } }` |
+
+O snapshot traz `fog`. O servidor só guarda a configuração: cada navegador
+acende uma luz no centro de cada token que tem dono, com o alcance escolhido, e
+escurece o resto do tabuleiro para os jogadores.
+
+A névoa esconde o que o navegador desenha, não os dados. A imagem do mapa e os
+tokens no escuro continuam chegando ao jogador. Para um segredo de verdade, o
+mestre usa uma área oculta ou um token oculto, que nunca saem do servidor.
+
 ## Testes
 
 `map-image.spec.ts` monta cabeçalhos byte a byte de cada formato e de arquivos
 falsos. `map-use-cases.spec.ts` cobre permissões, limites, posição das áreas
-novas, cena única, áreas ocultas, o que o jogador pode ler e o cache. `test/maps.e2e-spec.ts` envia arquivos de verdade
+novas, cena única, áreas ocultas, o que o jogador pode ler e o cache.
+`fog-use-cases.spec.ts` cobre o padrão da névoa, as permissões e os limites do
+alcance. `test/maps.e2e-spec.ts` envia arquivos de verdade
 por HTTP, tenta SVG disfarçado e arquivo grande demais, confere os cabeçalhos da
-resposta e acompanha a troca de cena e a revelação de uma área chegando ao
-jogador pelo socket.
+resposta e acompanha pelo socket a troca de cena, a revelação de uma área e a
+névoa chegando ao jogador.

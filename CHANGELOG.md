@@ -6,6 +6,19 @@ do roadmap e o patch a cada melhoria ou correção. As notas para os jogadores
 ficam na aba Atualizações do
 [frontend](https://github.com/Siay-y/Frontend-NeuralGrid).
 
+## 0.6.0 (2026-11-12)
+
+Etapa 6: névoa de guerra.
+
+### Novo
+
+- Tabela `table_settings`, com uma linha só, guardando `fog_enabled` e
+  `light_radius` (de 2 a 20 quadrados, 6 por padrão). Migration
+  `CreateTableSettings`.
+- Evento `fog:update` (só o mestre, `{ enabled?, radius? }`) e `fog:changed`
+  para todos. O snapshot traz `fog`. A luz e a escuridão são calculadas no
+  navegador, a partir dos tokens que têm dono.
+
 ## 0.5.0 (2026-11-11)
 
 Etapa 5: mapas.

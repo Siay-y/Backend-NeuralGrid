@@ -41,6 +41,11 @@ import {
 } from '../../../maps/application/dtos/map-view';
 import { MapEvents } from '../../../maps/application/services/map-events';
 import {
+  GetFogUseCase,
+  UpdateFogUseCase,
+} from '../../../maps/application/use-cases/fog-use-cases';
+import type { FogSettings } from '../../../maps/domain/value-objects/fog-settings';
+import {
   ActivateMapUseCase,
   DeleteMapAreaUseCase,
   DeleteMapUseCase,
@@ -83,6 +88,7 @@ import {
   MapIdDto,
   RenameMapDto,
   UpdateAreaDto,
+  UpdateFogDto,
 } from './dtos/map.dtos';
 import { CreateSheetDto, SheetIdDto, UpdateSheetDto } from './dtos/sheet.dtos';
 import {
@@ -168,6 +174,8 @@ export class TableGateway
     private readonly deleteMap: DeleteMapUseCase,
     private readonly deleteArea: DeleteMapAreaUseCase,
     private readonly mapEvents: MapEvents,
+    private readonly getFog: GetFogUseCase,
+    private readonly updateFog: UpdateFogUseCase,
   ) {}
 
   afterInit(namespace: Namespace): void {
@@ -226,6 +234,7 @@ export class TableGateway
         sheetStats,
         maps,
         scene,
+        fog,
       ] = await Promise.all([
         this.listTokens.execute(actor),
         this.listUsers.execute(),
@@ -235,6 +244,7 @@ export class TableGateway
         this.listSheetStats.execute(),
         this.listMaps.execute(actor),
         this.getScene.execute(),
+        this.getFog.execute(),
       ]);
       socket.emit(TableServerEvent.Snapshot, {
         you: user,
@@ -251,6 +261,7 @@ export class TableGateway
         sheetStats,
         maps,
         scene: user.role === 'master' ? scene : toPlayerScene(scene),
+        fog,
       });
     } catch (error) {
       this.logger.error(error instanceof Error ? error.stack : String(error));
@@ -613,6 +624,19 @@ export class TableGateway
       const map = await this.deleteArea.execute(actor, dto.id);
       this.publishMap(map, TableServerEvent.MapUpdated);
       return map;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.UpdateFog)
+  editFog(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<FogSettings>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(UpdateFogDto, body);
+      const fog = await this.updateFog.execute(actor, dto);
+      this.server.emit(TableServerEvent.FogChanged, { fog });
+      return fog;
     });
   }
 

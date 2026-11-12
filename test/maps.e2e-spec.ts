@@ -141,6 +141,9 @@ describe('Maps (e2e)', () => {
     const data = app.get(DataSource);
     await data.query('TRUNCATE TABLE "maps" CASCADE');
     await data.query('TRUNCATE TABLE "users" CASCADE');
+    await data.query(
+      'UPDATE "table_settings" SET "fog_enabled" = false, "light_radius" = 6',
+    );
     const provision = app.get(ProvisionUserUseCase);
     for (const [username, role] of [
       ['mestre', 'master'],
@@ -167,7 +170,11 @@ describe('Maps (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.get(DataSource).query('TRUNCATE TABLE "maps" CASCADE');
+    const data = app.get(DataSource);
+    await data.query('TRUNCATE TABLE "maps" CASCADE');
+    await data.query(
+      'UPDATE "table_settings" SET "fog_enabled" = false, "light_radius" = 6',
+    );
     await app.close();
   });
 
@@ -310,5 +317,27 @@ describe('Maps (e2e)', () => {
     );
     expect((await cleared).scene).toBeNull();
     await fetchImage(sessions.jogador1, entrance.id).expect(404);
+  });
+
+  it('shares the fog settings and lets only the master change them', async () => {
+    const master = await open(sessions.mestre);
+    const player = await open(sessions.jogador1);
+    expect(player.snapshot.fog).toEqual({ enabled: false, radius: 6 });
+
+    const refused = await send(player.socket, 'fog:update', { enabled: true });
+    expect(refused.error?.code).toBe('MAP_FORBIDDEN');
+    const broken = await send(master.socket, 'fog:update', { radius: 50 });
+    expect(broken.error?.code).toBe('INVALID_PAYLOAD');
+
+    const changed = next<{ fog: unknown }>(player.socket, 'fog:changed');
+    const saved = await send(master.socket, 'fog:update', {
+      enabled: true,
+      radius: 8,
+    });
+    expect(saved.data).toEqual({ enabled: true, radius: 8 });
+    expect((await changed).fog).toEqual({ enabled: true, radius: 8 });
+
+    const rejoined = await open(sessions.jogador1);
+    expect(rejoined.snapshot.fog).toEqual({ enabled: true, radius: 8 });
   });
 });
