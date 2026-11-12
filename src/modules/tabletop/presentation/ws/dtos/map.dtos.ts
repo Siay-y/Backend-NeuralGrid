@@ -1,5 +1,8 @@
 import {
   IsBoolean,
+  IsInt,
+  Max,
+  Min,
   IsNumber,
   IsOptional,
   IsString,
@@ -61,4 +64,20 @@ export class UpdateAreaDto extends MapIdDto {
     { message: NUMBER_MESSAGE },
   )
   cell?: number;
+}
+
+const RADIUS_MESSAGE = 'O alcance da luz precisa ser de 2 a 20 quadrados';
+
+export class UpdateFogDto {
+  @IsOptional()
+  @IsBoolean({
+    message: 'Informe se a névoa fica ligada com verdadeiro ou falso',
+  })
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsInt({ message: RADIUS_MESSAGE })
+  @Min(2, { message: RADIUS_MESSAGE })
+  @Max(20, { message: RADIUS_MESSAGE })
+  radius?: number;
 }
