@@ -20,6 +20,7 @@ export interface UpdateTokenInput {
   sex?: TokenSex | null;
   hidden?: boolean;
   nameHidden?: boolean;
+  emitsLight?: boolean;
   ownerId?: string | null;
   sheetId?: string | null;
   size?: number;
@@ -58,6 +59,7 @@ export class UpdateTokenUseCase {
       sex: input.sex === undefined ? token.sex : input.sex,
       hidden: input.hidden ?? token.hidden,
       nameHidden: input.nameHidden ?? token.nameHidden,
+      emitsLight: input.emitsLight ?? token.emitsLight,
       size: input.size ?? token.size,
       ownerId: input.ownerId === undefined ? token.ownerId : input.ownerId,
       sheetId,

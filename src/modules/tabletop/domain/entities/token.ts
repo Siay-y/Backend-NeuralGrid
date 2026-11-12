@@ -16,6 +16,7 @@ export interface TokenProps {
   sex: TokenSex | null;
   hidden: boolean;
   nameHidden: boolean;
+  emitsLight: boolean;
   ownerId: string | null;
   sheetId: string | null;
   col: number;
@@ -33,6 +34,7 @@ export interface TokenDetails {
   sex: TokenSex | null;
   hidden: boolean;
   nameHidden: boolean;
+  emitsLight: boolean;
   ownerId: string | null;
   sheetId: string | null;
   size: number;
@@ -105,6 +107,7 @@ function validDetails(details: TokenDetails): TokenDetails {
     sex: assertSex(details.sex),
     hidden: details.hidden === true,
     nameHidden: details.nameHidden === true,
+    emitsLight: details.emitsLight !== false,
     ownerId: details.ownerId,
     sheetId: details.sheetId,
     size: assertSize(details.size),
@@ -159,6 +162,10 @@ export class Token {
     return this.props.nameHidden;
   }
 
+  get emitsLight(): boolean {
+    return this.props.emitsLight;
+  }
+
   get ownerId(): string | null {
     return this.props.ownerId;
   }
@@ -168,8 +175,17 @@ export class Token {
   }
 
   get details(): TokenDetails {
-    const { label, kind, icon, sex, hidden, nameHidden, ownerId, sheetId } =
-      this.props;
+    const {
+      label,
+      kind,
+      icon,
+      sex,
+      hidden,
+      nameHidden,
+      emitsLight,
+      ownerId,
+      sheetId,
+    } = this.props;
     return {
       label,
       kind,
@@ -177,6 +193,7 @@ export class Token {
       sex,
       hidden,
       nameHidden,
+      emitsLight,
       ownerId,
       sheetId,
       size: this.props.size,

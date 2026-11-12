@@ -300,6 +300,7 @@ export class TableGateway
         sex: dto.sex ?? null,
         hidden: dto.hidden ?? false,
         nameHidden: dto.nameHidden ?? false,
+        emitsLight: dto.emitsLight ?? true,
         ownerId: dto.ownerId ?? null,
         sheetId: dto.sheetId ?? null,
         col: dto.col,

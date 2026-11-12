@@ -42,6 +42,7 @@ const ICON_MESSAGE = 'Ícone de token desconhecido';
 const HIDDEN_MESSAGE = 'A visibilidade precisa ser verdadeiro ou falso';
 const SEX_MESSAGE = 'O sexo precisa ser feminino, masculino, outro ou nulo';
 const NAME_HIDDEN_MESSAGE = 'Esconder o nome precisa ser verdadeiro ou falso';
+const LIGHT_MESSAGE = 'Iluminar na névoa precisa ser verdadeiro ou falso';
 const ID_MESSAGE = 'Identificador de token inválido';
 const SHEET_MESSAGE = 'A ficha precisa ser um identificador válido ou nula';
 
@@ -90,6 +91,10 @@ export class CreateTokenDto {
   @IsOptional()
   @IsBoolean({ message: NAME_HIDDEN_MESSAGE })
   nameHidden?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: LIGHT_MESSAGE })
+  emitsLight?: boolean;
 
   @IsOptional()
   @IsUUID('4', { message: OWNER_MESSAGE })
@@ -148,6 +153,10 @@ export class UpdateTokenDto extends TokenIdDto {
   @IsOptional()
   @IsBoolean({ message: NAME_HIDDEN_MESSAGE })
   nameHidden?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: LIGHT_MESSAGE })
+  emitsLight?: boolean;
 
   @ValidateIf(
     (dto: UpdateTokenDto) => dto.ownerId !== null && dto.ownerId !== undefined,

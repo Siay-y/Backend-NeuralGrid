@@ -6,6 +6,15 @@ do roadmap e o patch a cada melhoria ou correção. As notas para os jogadores
 ficam na aba Atualizações do
 [frontend](https://github.com/Siay-y/Frontend-NeuralGrid).
 
+## 0.6.1 (2026-11-12)
+
+### Novo
+
+- Campo `emitsLight` no token, `true` por padrão, aceito em `token:create` e
+  `token:update` (só o mestre). Com `false`, o token não acende luz na névoa,
+  e o mestre pode esconder um inimigo no escuro. Migration `AddTokenLight`
+  (coluna `emits_light`).
+
 ## 0.6.0 (2026-11-12)
 
 Etapa 6: névoa de guerra.

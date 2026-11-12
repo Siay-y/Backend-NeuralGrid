@@ -32,6 +32,7 @@ const agentInput = {
   sex: null,
   hidden: false,
   nameHidden: false,
+  emitsLight: true,
   ownerId: 'player-1',
   sheetId: null,
   col: 0,
@@ -428,6 +429,28 @@ describe('token use cases', () => {
 
       expect(kept.token).toMatchObject({ sex: 'female', nameHidden: true });
       expect(revealed.token).toMatchObject({ sex: null, nameHidden: false });
+    });
+  });
+
+  describe('light in the fog', () => {
+    it('lets the master keep a token dark across other edits', async () => {
+      const { id } = await create.execute(master, agentInput);
+
+      const dark = await update.execute(master, { id, emitsLight: false });
+      const kept = await update.execute(master, { id, size: 2 });
+      const [forPlayer] = await list.execute(player);
+
+      expect(dark.token.emitsLight).toBe(false);
+      expect(kept.token).toMatchObject({ emitsLight: false, size: 2 });
+      expect(forPlayer.emitsLight).toBe(false);
+    });
+
+    it('does not let a player turn a light off', async () => {
+      const { id } = await create.execute(master, agentInput);
+
+      await expect(
+        update.execute(player, { id, emitsLight: false }),
+      ).rejects.toBeInstanceOf(TokenForbiddenError);
     });
   });
 });

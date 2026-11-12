@@ -40,8 +40,8 @@ fire-and-forget.
 
 | Evento | Quem pode | Payload | Resposta |
 | --- | --- | --- | --- |
-| `token:create` | mestre | `{ label, kind, icon?, sex?, hidden?, nameHidden?, ownerId?, col, row, size? }` | token criado |
-| `token:update` | mestre | `{ id, label?, kind?, icon?, sex?, hidden?, nameHidden?, ownerId?, size? }` | token atualizado |
+| `token:create` | mestre | `{ label, kind, icon?, sex?, hidden?, nameHidden?, emitsLight?, ownerId?, col, row, size? }` | token criado |
+| `token:update` | mestre | `{ id, label?, kind?, icon?, sex?, hidden?, nameHidden?, emitsLight?, ownerId?, size? }` | token atualizado |
 | `token:move` | mestre ou dono | `{ id, col, row }` | token com `version` nova |
 | `token:drag` | mestre ou dono | `{ id, col, row }` | nenhuma |
 | `token:delete` | mestre | `{ id }` | `{ id }` |
@@ -90,6 +90,7 @@ saem do servidor.
 | `hidden` | `true` deixa o token só para o mestre |
 | `sex` | `female`, `male`, `other` ou `null` |
 | `nameHidden` | `true` troca o nome por `???` para os jogadores |
+| `emitsLight` | `true` por padrão; com `false`, o token não acende luz na névoa |
 | `ownerId` | um usuário da mesa ou `null`; se o usuário for removido, vira `null` |
 | `col`, `row` | inteiros entre -500 e 500 |
 | `size` | 1 a 4 células por lado |

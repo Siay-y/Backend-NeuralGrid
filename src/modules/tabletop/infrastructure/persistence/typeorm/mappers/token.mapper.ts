@@ -11,6 +11,7 @@ export const TokenMapper = {
       sex: row.sex,
       hidden: row.hidden,
       nameHidden: row.nameHidden,
+      emitsLight: row.emitsLight,
       ownerId: row.ownerId,
       sheetId: row.sheetId,
       col: row.col,
@@ -31,6 +32,7 @@ export const TokenMapper = {
     row.sex = token.sex;
     row.hidden = token.hidden;
     row.nameHidden = token.nameHidden;
+    row.emitsLight = token.emitsLight;
     row.ownerId = token.ownerId;
     row.sheetId = token.sheetId;
     row.col = token.col;
