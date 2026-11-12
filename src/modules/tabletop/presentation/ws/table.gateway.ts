@@ -41,9 +41,16 @@ import {
 } from '../../../maps/application/dtos/map-view';
 import { MapEvents } from '../../../maps/application/services/map-events';
 import {
+  ExploreFogUseCase,
+  ForgetFogUseCase,
+  GetFogMemoryUseCase,
   GetFogUseCase,
   UpdateFogUseCase,
 } from '../../../maps/application/use-cases/fog-use-cases';
+import type {
+  FogMemoryView,
+  LightStep,
+} from '../../../maps/domain/value-objects/fog-memory';
 import type { FogSettings } from '../../../maps/domain/value-objects/fog-settings';
 import {
   ActivateMapUseCase,
@@ -132,6 +139,17 @@ type TableSocket = Socket<
 const RATE_LIMIT = { capacity: 30, refillPerSecond: 15 };
 export const MAX_CONNECTIONS_PER_USER = 5;
 
+interface GridSpot {
+  col: number;
+  row: number;
+}
+
+// Only tokens the players can see and that carry a light leave a trail, so the
+// memory never points at a hidden enemy or at a token kept in the dark.
+function lightsTheWay(token: TokenView): boolean {
+  return token.ownerId !== null && token.emitsLight && !token.hidden;
+}
+
 @WebSocketGateway({ namespace: TABLE_NAMESPACE })
 export class TableGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
@@ -176,6 +194,9 @@ export class TableGateway
     private readonly mapEvents: MapEvents,
     private readonly getFog: GetFogUseCase,
     private readonly updateFog: UpdateFogUseCase,
+    private readonly getFogMemory: GetFogMemoryUseCase,
+    private readonly exploreFog: ExploreFogUseCase,
+    private readonly forgetFog: ForgetFogUseCase,
   ) {}
 
   afterInit(namespace: Namespace): void {
@@ -235,6 +256,7 @@ export class TableGateway
         maps,
         scene,
         fog,
+        fogMemory,
       ] = await Promise.all([
         this.listTokens.execute(actor),
         this.listUsers.execute(),
@@ -245,6 +267,7 @@ export class TableGateway
         this.listMaps.execute(actor),
         this.getScene.execute(),
         this.getFog.execute(),
+        this.getFogMemory.execute(),
       ]);
       socket.emit(TableServerEvent.Snapshot, {
         you: user,
@@ -262,6 +285,7 @@ export class TableGateway
         maps,
         scene: user.role === 'master' ? scene : toPlayerScene(scene),
         fog,
+        fogMemory,
       });
     } catch (error) {
       this.logger.error(error instanceof Error ? error.stack : String(error));
@@ -308,6 +332,7 @@ export class TableGateway
         size: dto.size ?? 1,
       });
       this.publishToken(TableServerEvent.TokenCreated, token, true);
+      await this.explore([{ token, from: null }]);
       return token;
     });
   }
@@ -321,6 +346,7 @@ export class TableGateway
       const dto = await parsePayload(UpdateTokenDto, body);
       const { token, wasHidden } = await this.updateToken.execute(actor, dto);
       this.publishToken(TableServerEvent.TokenUpdated, token, wasHidden);
+      await this.explore([{ token, from: null }]);
       return token;
     });
   }
@@ -332,8 +358,9 @@ export class TableGateway
   ): Promise<WsResult<TokenView>> {
     return this.run(socket, async (actor) => {
       const dto = await parsePayload(TokenPositionDto, body);
-      const token = await this.moveToken.execute(actor, dto);
+      const { token, from } = await this.moveToken.execute(actor, dto);
       this.publishToken(TableServerEvent.TokenUpdated, token, token.hidden);
+      await this.explore([{ token, from }]);
       return viewFor(actor, token);
     });
   }
@@ -595,6 +622,8 @@ export class TableGateway
       const dto = await parsePayload(ActivateMapDto, body);
       const map = await this.activateMap.execute(actor, dto.id);
       this.publishScene(map ? toSceneView(map) : null);
+      await this.publishMemory();
+      await this.exploreAll(actor);
       return { id: map?.id ?? null };
     });
   }
@@ -610,6 +639,7 @@ export class TableGateway
       this.server.to(MASTERS_ROOM).emit(TableServerEvent.MapDeleted, { id });
       if (wasActive) {
         this.publishScene(null);
+        await this.publishMemory();
       }
       return { id };
     });
@@ -637,7 +667,62 @@ export class TableGateway
       const dto = await parsePayload(UpdateFogDto, body);
       const fog = await this.updateFog.execute(actor, dto);
       this.server.emit(TableServerEvent.FogChanged, { fog });
+      await this.exploreAll(actor);
       return fog;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.ForgetFog)
+  forgetExplored(
+    @ConnectedSocket() socket: TableSocket,
+  ): Promise<WsResult<FogMemoryView | null>> {
+    return this.run(socket, async (actor) => {
+      const memory = await this.forgetFog.execute(actor);
+      this.server.emit(TableServerEvent.FogMemory, {
+        mapId: memory?.mapId ?? null,
+        points: [],
+        reset: true,
+      });
+      return memory;
+    });
+  }
+
+  private async exploreAll(actor: TableActor): Promise<void> {
+    const tokens = await this.listTokens.execute(actor);
+    await this.explore(tokens.map((token) => ({ token, from: null })));
+  }
+
+  private async explore(
+    moves: readonly { token: TokenView; from: GridSpot | null }[],
+  ): Promise<void> {
+    const steps: LightStep[] = moves
+      .filter(({ token }) => lightsTheWay(token))
+      .map(({ token, from }) => ({
+        from: from ? { ...from, size: token.size } : null,
+        to: { col: token.col, row: token.row, size: token.size },
+      }));
+    if (steps.length === 0) {
+      return;
+    }
+    try {
+      const added = await this.exploreFog.execute(steps);
+      if (added) {
+        this.server.emit(TableServerEvent.FogMemory, {
+          ...added,
+          reset: false,
+        });
+      }
+    } catch (error) {
+      this.logger.error(error instanceof Error ? error.stack : String(error));
+    }
+  }
+
+  private async publishMemory(): Promise<void> {
+    const memory = await this.getFogMemory.execute();
+    this.server.emit(TableServerEvent.FogMemory, {
+      mapId: memory?.mapId ?? null,
+      points: memory?.points ?? [],
+      reset: true,
     });
   }
 

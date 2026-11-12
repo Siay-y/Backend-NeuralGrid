@@ -114,7 +114,8 @@ describe('token use cases', () => {
 
       const moved = await move.execute(player, { id, col: 3, row: 4 });
 
-      expect(moved).toMatchObject({ col: 3, row: 4, version: 2 });
+      expect(moved.token).toMatchObject({ col: 3, row: 4, version: 2 });
+      expect(moved.from).toEqual({ col: 0, row: 0 });
     });
 
     it("blocks a player from moving someone else's token", async () => {
@@ -134,7 +135,8 @@ describe('token use cases', () => {
       await expect(
         move.execute(master, { id, col: 9, row: 9 }),
       ).resolves.toMatchObject({
-        col: 9,
+        token: { col: 9, row: 9 },
+        from: { col: 0, row: 0 },
       });
     });
 
@@ -346,7 +348,7 @@ describe('token use cases', () => {
       ).rejects.toBeInstanceOf(TokenNotFoundError);
       await expect(
         move.execute(master, { id, col: 1, row: 1 }),
-      ).resolves.toMatchObject({ hidden: true });
+      ).resolves.toMatchObject({ token: { hidden: true } });
     });
 
     it('reports the previous visibility when the master reveals one', async () => {

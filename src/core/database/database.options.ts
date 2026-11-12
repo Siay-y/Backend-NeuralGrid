@@ -2,6 +2,7 @@ import type { DataSourceOptions } from 'typeorm';
 import { MapOrmEntity } from '../../modules/maps/infrastructure/persistence/typeorm/map.orm-entity';
 import { MapAreaOrmEntity } from '../../modules/maps/infrastructure/persistence/typeorm/map-area.orm-entity';
 import { TableSettingsOrmEntity } from '../../modules/maps/infrastructure/persistence/typeorm/table-settings.orm-entity';
+import { FogExploredOrmEntity } from '../../modules/maps/infrastructure/persistence/typeorm/fog-explored.orm-entity';
 import { ChatMessageOrmEntity } from '../../modules/chat/infrastructure/persistence/typeorm/entities/chat-message.orm-entity';
 import { SheetOrmEntity } from '../../modules/sheets/infrastructure/persistence/typeorm/sheet.orm-entity';
 import { DrawingOrmEntity } from '../../modules/tabletop/infrastructure/persistence/typeorm/entities/drawing.orm-entity';
@@ -20,6 +21,7 @@ import { AddSheetStatsVisibility1767571200000 } from './migrations/1767571200000
 import { CreateMaps1768176000000 } from './migrations/1768176000000-create-maps';
 import { CreateTableSettings1768780800000 } from './migrations/1768780800000-create-table-settings';
 import { AddTokenLight1768867200000 } from './migrations/1768867200000-add-token-light';
+import { AddFogMemory1768953600000 } from './migrations/1768953600000-add-fog-memory';
 
 export interface DatabaseSettings {
   url: string;
@@ -57,6 +59,7 @@ export function buildDataSourceOptions(
       MapOrmEntity,
       MapAreaOrmEntity,
       TableSettingsOrmEntity,
+      FogExploredOrmEntity,
     ],
     migrations: [
       CreateUsers1762790400000,
@@ -71,6 +74,7 @@ export function buildDataSourceOptions(
       CreateMaps1768176000000,
       CreateTableSettings1768780800000,
       AddTokenLight1768867200000,
+      AddFogMemory1768953600000,
     ],
     migrationsTableName: 'typeorm_migrations',
     uuidExtension: 'pgcrypto',

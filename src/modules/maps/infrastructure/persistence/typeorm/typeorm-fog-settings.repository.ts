@@ -22,13 +22,22 @@ export class TypeOrmFogSettingsRepository extends FogSettingsRepository {
   async get(): Promise<FogSettings> {
     const row = await this.rows.findOneBy({ id: SETTINGS_ID });
     return row
-      ? { enabled: row.fogEnabled, radius: row.lightRadius }
+      ? {
+          enabled: row.fogEnabled,
+          radius: row.lightRadius,
+          memory: row.fogMemory,
+        }
       : { ...DEFAULT_FOG };
   }
 
   async save(fog: FogSettings): Promise<void> {
     await this.rows.upsert(
-      { id: SETTINGS_ID, fogEnabled: fog.enabled, lightRadius: fog.radius },
+      {
+        id: SETTINGS_ID,
+        fogEnabled: fog.enabled,
+        lightRadius: fog.radius,
+        fogMemory: fog.memory,
+      },
       ['id'],
     );
   }

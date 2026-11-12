@@ -7,6 +7,11 @@ import {
 import { TokenRepository } from '../../domain/repositories/token.repository';
 import { toTokenView, TokenView } from '../dtos/token-view';
 
+export interface TokenMove {
+  token: TokenView;
+  from: { col: number; row: number };
+}
+
 export interface MoveTokenInput {
   id: string;
   col: number;
@@ -17,7 +22,7 @@ export interface MoveTokenInput {
 export class MoveTokenUseCase {
   constructor(private readonly tokens: TokenRepository) {}
 
-  async execute(actor: TableActor, input: MoveTokenInput): Promise<TokenView> {
+  async execute(actor: TableActor, input: MoveTokenInput): Promise<TokenMove> {
     const token = await this.tokens.findById(input.id);
     if (!token || !TokenPolicy.canSee(actor, token)) {
       throw new TokenNotFoundError();
@@ -26,6 +31,9 @@ export class MoveTokenUseCase {
 
     const moved = token.moveTo(input.col, input.row, new Date());
     await this.tokens.save(moved);
-    return toTokenView(moved);
+    return {
+      token: toTokenView(moved),
+      from: { col: token.col, row: token.row },
+    };
   }
 }

@@ -15,9 +15,15 @@ import {
   UploadMapUseCase,
 } from './application/use-cases/map-use-cases';
 import {
+  ExploreFogUseCase,
+  ForgetFogUseCase,
+  GetFogMemoryUseCase,
   GetFogUseCase,
   UpdateFogUseCase,
 } from './application/use-cases/fog-use-cases';
+import { FogMemoryRepository } from './domain/repositories/fog-memory.repository';
+import { FogExploredOrmEntity } from './infrastructure/persistence/typeorm/fog-explored.orm-entity';
+import { TypeOrmFogMemoryRepository } from './infrastructure/persistence/typeorm/typeorm-fog-memory.repository';
 import { FogSettingsRepository } from './domain/repositories/fog-settings.repository';
 import { MapRepository } from './domain/repositories/map.repository';
 import { MapAreaOrmEntity } from './infrastructure/persistence/typeorm/map-area.orm-entity';
@@ -33,14 +39,19 @@ import { MapsController } from './presentation/http/maps.controller';
       MapOrmEntity,
       MapAreaOrmEntity,
       TableSettingsOrmEntity,
+      FogExploredOrmEntity,
     ]),
   ],
   controllers: [MapsController],
   providers: [
     { provide: MapRepository, useClass: TypeOrmMapRepository },
     { provide: FogSettingsRepository, useClass: TypeOrmFogSettingsRepository },
+    { provide: FogMemoryRepository, useClass: TypeOrmFogMemoryRepository },
     GetFogUseCase,
     UpdateFogUseCase,
+    GetFogMemoryUseCase,
+    ExploreFogUseCase,
+    ForgetFogUseCase,
     MapEvents,
     MapImageCache,
     ListMapsUseCase,
@@ -57,6 +68,9 @@ import { MapsController } from './presentation/http/maps.controller';
   exports: [
     GetFogUseCase,
     UpdateFogUseCase,
+    GetFogMemoryUseCase,
+    ExploreFogUseCase,
+    ForgetFogUseCase,
     MapEvents,
     ListMapsUseCase,
     GetSceneUseCase,

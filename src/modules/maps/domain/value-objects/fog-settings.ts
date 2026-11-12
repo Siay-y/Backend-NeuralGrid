@@ -3,6 +3,7 @@ import { InvalidMapError } from '../errors/invalid-map.error';
 export interface FogSettings {
   enabled: boolean;
   radius: number;
+  memory: boolean;
 }
 
 export const FOG_RADIUS = { min: 2, max: 20, default: 6 } as const;
@@ -10,6 +11,7 @@ export const FOG_RADIUS = { min: 2, max: 20, default: 6 } as const;
 export const DEFAULT_FOG: FogSettings = {
   enabled: false,
   radius: FOG_RADIUS.default,
+  memory: false,
 };
 
 export function editFog(
@@ -26,5 +28,9 @@ export function editFog(
       `O alcance da luz precisa ficar entre ${FOG_RADIUS.min} e ${FOG_RADIUS.max} quadrados`,
     );
   }
-  return { enabled: changes.enabled ?? current.enabled, radius };
+  return {
+    enabled: changes.enabled ?? current.enabled,
+    radius,
+    memory: changes.memory ?? current.memory,
+  };
 }
