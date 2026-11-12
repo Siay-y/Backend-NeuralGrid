@@ -56,6 +56,16 @@ interface Ack<T> {
   error?: { code: string; message: string };
 }
 
+interface CombatData {
+  round: number;
+  turnId: string | null;
+  combatants: Array<{
+    tokenId: string;
+    initiative: number | null;
+    hidden: boolean;
+  }>;
+}
+
 interface TokenData {
   id: string;
   col: number;
@@ -821,5 +831,119 @@ describe('Table gateway (e2e)', () => {
       visibility: 'public',
     });
     expect(roll.ok).toBe(true);
+  });
+
+  it('runs a fight in initiative order and keeps hidden combatants from players', async () => {
+    const master = await open(sessions.mestre.token);
+    const player = await open(sessions.jogador1.token);
+    await app
+      .get(DataSource)
+      .query(`UPDATE "table_settings" SET "fog_enabled" = false`);
+    await send(master.socket, 'combat:end', {});
+
+    const hero = await send<TokenData>(master.socket, 'token:create', {
+      label: 'Kael',
+      kind: 'agent',
+      ownerId: sessions.jogador1.userId,
+      col: 0,
+      row: 0,
+    });
+    const lich = await send<TokenData>(master.socket, 'token:create', {
+      label: 'Lich',
+      kind: 'threat',
+      col: 3,
+      row: 0,
+    });
+    const heroId = hero.data!.id;
+    const lichId = lich.data!.id;
+
+    const refused = await send(player.socket, 'combat:join', {
+      tokenIds: [heroId],
+    });
+    expect(refused.error?.code).toBe('COMBAT_FORBIDDEN');
+
+    const playerSeesJoin = next<{ combat: CombatData }>(
+      player.socket,
+      'combat:changed',
+    );
+    await send(master.socket, 'combat:join', { tokenIds: [heroId, lichId] });
+    expect(
+      (await playerSeesJoin).combat.combatants.map(({ tokenId }) => tokenId),
+    ).toEqual([heroId, lichId]);
+
+    const playerSeesAmbush = next<{ combat: CombatData }>(
+      player.socket,
+      'combat:changed',
+    );
+    await send(master.socket, 'combat:update', {
+      tokenId: lichId,
+      initiative: 20,
+      hidden: true,
+    });
+    expect((await playerSeesAmbush).combat.combatants).toEqual([
+      { tokenId: heroId, initiative: null, hidden: false },
+    ]);
+
+    await send(master.socket, 'combat:update', {
+      tokenId: heroId,
+      initiative: 12,
+    });
+    const playerSeesStart = next<{ combat: CombatData }>(
+      player.socket,
+      'combat:changed',
+    );
+    const started = await send<CombatData>(master.socket, 'combat:start', {});
+    expect(started.data).toMatchObject({ round: 1, turnId: lichId });
+    expect((await playerSeesStart).combat).toMatchObject({
+      round: 1,
+      turnId: null,
+    });
+
+    const passed = await send<CombatData>(master.socket, 'combat:step', {
+      step: 1,
+    });
+    expect(passed.data?.turnId).toBe(heroId);
+    const stale = await send(master.socket, 'combat:step', {
+      step: 1,
+      round: 1,
+      turnId: lichId,
+    });
+    expect(stale.error?.code).toBe('INVALID_COMBAT');
+
+    const late = await open(sessions.jogador2.token);
+    expect(
+      (late.snapshot as Snapshot & { combat: CombatData }).combat,
+    ).toMatchObject({
+      round: 1,
+      turnId: heroId,
+      combatants: [{ tokenId: heroId }],
+    });
+
+    const invalid = await send(master.socket, 'combat:update', {
+      tokenId: heroId,
+      initiative: 1.5,
+    });
+    expect(invalid.error?.code).toBe('INVALID_PAYLOAD');
+
+    const notYours = await send(player.socket, 'combat:pass', {
+      tokenId: lichId,
+    });
+    expect(notYours.error?.code).toBe('COMBAT_FORBIDDEN');
+    const ownTurn = await send<CombatData>(player.socket, 'combat:pass', {
+      tokenId: heroId,
+    });
+    expect(ownTurn.data).toMatchObject({ round: 2, turnId: null });
+
+    const playerSeesRemoval = until<{ combat: CombatData }>(
+      player.socket,
+      'combat:changed',
+      ({ combat }) => combat.combatants.length === 0,
+    );
+    await send(master.socket, 'token:delete', { id: heroId });
+    expect((await playerSeesRemoval).combat.turnId).toBeNull();
+
+    const ended = await send<CombatData>(master.socket, 'combat:end', {});
+    expect(ended.data).toEqual({ round: 0, turnId: null, combatants: [] });
+    await send(master.socket, 'token:delete', { id: lichId });
   });
 });

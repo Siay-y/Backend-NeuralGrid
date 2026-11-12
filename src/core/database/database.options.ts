@@ -7,6 +7,7 @@ import { ChatMessageOrmEntity } from '../../modules/chat/infrastructure/persiste
 import { SheetOrmEntity } from '../../modules/sheets/infrastructure/persistence/typeorm/sheet.orm-entity';
 import { DrawingOrmEntity } from '../../modules/tabletop/infrastructure/persistence/typeorm/entities/drawing.orm-entity';
 import { TokenOrmEntity } from '../../modules/tabletop/infrastructure/persistence/typeorm/entities/token.orm-entity';
+import { CombatOrmEntity } from '../../modules/tabletop/infrastructure/persistence/typeorm/entities/combat.orm-entity';
 import { UserOrmEntity } from '../../modules/users/infrastructure/persistence/typeorm/entities/user.orm-entity';
 import { DatabaseSslMode } from './database-ssl-mode';
 import { CreateUsers1762790400000 } from './migrations/1762790400000-create-users';
@@ -22,6 +23,7 @@ import { CreateMaps1768176000000 } from './migrations/1768176000000-create-maps'
 import { CreateTableSettings1768780800000 } from './migrations/1768780800000-create-table-settings';
 import { AddTokenLight1768867200000 } from './migrations/1768867200000-add-token-light';
 import { AddFogMemory1768953600000 } from './migrations/1768953600000-add-fog-memory';
+import { CreateCombat1769040000000 } from './migrations/1769040000000-create-combat';
 
 export interface DatabaseSettings {
   url: string;
@@ -60,6 +62,7 @@ export function buildDataSourceOptions(
       MapAreaOrmEntity,
       TableSettingsOrmEntity,
       FogExploredOrmEntity,
+      CombatOrmEntity,
     ],
     migrations: [
       CreateUsers1762790400000,
@@ -75,6 +78,7 @@ export function buildDataSourceOptions(
       CreateTableSettings1768780800000,
       AddTokenLight1768867200000,
       AddFogMemory1768953600000,
+      CreateCombat1769040000000,
     ],
     migrationsTableName: 'typeorm_migrations',
     uuidExtension: 'pgcrypto',

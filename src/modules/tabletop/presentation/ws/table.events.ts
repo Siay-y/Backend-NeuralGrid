@@ -24,6 +24,14 @@ export const TableClientEvent = {
   DeleteArea: 'area:delete',
   UpdateFog: 'fog:update',
   ForgetFog: 'fog:forget',
+  JoinCombat: 'combat:join',
+  LeaveCombat: 'combat:leave',
+  UpdateCombatant: 'combat:update',
+  RollInitiative: 'combat:roll',
+  StartCombat: 'combat:start',
+  StepTurn: 'combat:step',
+  PassTurn: 'combat:pass',
+  EndCombat: 'combat:end',
 } as const;
 
 export const TableServerEvent = {
@@ -49,6 +57,7 @@ export const TableServerEvent = {
   SceneChanged: 'scene:changed',
   FogChanged: 'fog:changed',
   FogMemory: 'fog:memory',
+  CombatChanged: 'combat:changed',
   SessionExpired: 'session:expired',
   ConnectionLimit: 'session:limit',
 } as const;

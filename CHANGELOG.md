@@ -6,6 +6,23 @@ do roadmap e o patch a cada melhoria ou correção. As notas para os jogadores
 ficam na aba Atualizações do
 [frontend](https://github.com/Siay-y/Frontend-NeuralGrid).
 
+## 0.7.0 (2026-11-12)
+
+### Novo
+
+- Iniciativa: tabela `combat` (migration `CreateCombat`) e os eventos
+  `combat:join`, `combat:leave`, `combat:update`, `combat:roll`,
+  `combat:start`, `combat:step` e `combat:end`, só do mestre. `combat:roll`
+  sorteia d20 + Mod de Agilidade da ficha no servidor. Cada mudança manda
+  `combat:changed`; os jogadores não recebem participantes ocultos nem a vez de
+  quem não veem. O snapshot traz `combat`.
+- `combat:pass`: o jogador finaliza o turno do próprio personagem quando é a
+  vez dele.
+- As rolagens de iniciativa aparecem no chat, só para os mestres quando o
+  participante está oculto. `combat:step` aceita `round` e `turnId` e recusa um
+  passo pedido para uma vez que já mudou. As mudanças do combate são aplicadas
+  em fila.
+
 ## 0.6.2 (2026-11-12)
 
 ### Novo

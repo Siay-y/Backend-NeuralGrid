@@ -351,8 +351,12 @@ function assertName(data: SheetData): SheetData {
   return data;
 }
 
+export function attributeModifier(value: number): number {
+  return Math.floor((value - 10) / 2);
+}
+
 export function sheetDefense(data: SheetData): number {
-  return data.status.armor + Math.floor((data.attributes.resistance - 10) / 2);
+  return data.status.armor + attributeModifier(data.attributes.resistance);
 }
 
 export function normalizeSheetData(value: unknown): SheetData {

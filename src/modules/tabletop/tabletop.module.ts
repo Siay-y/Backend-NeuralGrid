@@ -18,6 +18,22 @@ import { ListTokensUseCase } from './application/use-cases/list-tokens.use-case'
 import { MoveTokenUseCase } from './application/use-cases/move-token.use-case';
 import { SyncSheetTokensUseCase } from './application/use-cases/sync-sheet-tokens.use-case';
 import { UpdateTokenUseCase } from './application/use-cases/update-token.use-case';
+import {
+  CombatTracker,
+  DropFromCombatUseCase,
+  EditCombatantUseCase,
+  EndCombatUseCase,
+  GetCombatUseCase,
+  JoinCombatUseCase,
+  LeaveCombatUseCase,
+  PassTurnUseCase,
+  RollInitiativeUseCase,
+  StartCombatUseCase,
+  StepTurnUseCase,
+} from './application/use-cases/combat-use-cases';
+import { CombatRepository } from './domain/repositories/combat.repository';
+import { CombatOrmEntity } from './infrastructure/persistence/typeorm/entities/combat.orm-entity';
+import { TypeOrmCombatRepository } from './infrastructure/persistence/typeorm/repositories/typeorm-combat.repository';
 import { DrawingRepository } from './domain/repositories/drawing.repository';
 import { TokenRepository } from './domain/repositories/token.repository';
 import { DrawingOrmEntity } from './infrastructure/persistence/typeorm/entities/drawing.orm-entity';
@@ -29,7 +45,11 @@ import { TableGateway } from './presentation/ws/table.gateway';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([TokenOrmEntity, DrawingOrmEntity]),
+    TypeOrmModule.forFeature([
+      TokenOrmEntity,
+      DrawingOrmEntity,
+      CombatOrmEntity,
+    ]),
     UsersModule,
     AuthModule,
     ChatModule,
@@ -39,6 +59,18 @@ import { TableGateway } from './presentation/ws/table.gateway';
   providers: [
     { provide: TokenRepository, useClass: TypeOrmTokenRepository },
     { provide: DrawingRepository, useClass: TypeOrmDrawingRepository },
+    { provide: CombatRepository, useClass: TypeOrmCombatRepository },
+    CombatTracker,
+    GetCombatUseCase,
+    JoinCombatUseCase,
+    LeaveCombatUseCase,
+    EditCombatantUseCase,
+    RollInitiativeUseCase,
+    StartCombatUseCase,
+    StepTurnUseCase,
+    PassTurnUseCase,
+    DropFromCombatUseCase,
+    EndCombatUseCase,
     TokenOwnerValidator,
     TokenSheetLink,
     ListTokensUseCase,
