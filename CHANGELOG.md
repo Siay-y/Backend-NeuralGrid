@@ -6,6 +6,34 @@ do roadmap e o patch a cada melhoria ou correção. As notas para os jogadores
 ficam na aba Atualizações do
 [frontend](https://github.com/Siay-y/Frontend-NeuralGrid).
 
+## 0.5.0 (2026-11-11)
+
+Etapa 5: mapas.
+
+### Novo
+
+- Módulo `maps`, com as imagens guardadas no próprio Postgres (`bytea`). Um
+  mapa (`maps`) reúne várias áreas (`map_areas`), cada uma com a própria
+  imagem, posição, escala e a opção de ficar oculta. Migration `CreateMaps`.
+  Não exige serviço nem segredo novo.
+- `POST /api/maps` cria um mapa com a primeira área e `POST /api/maps/:id/areas`
+  adiciona uma área (só o mestre, multipart com `name`, `image`, `thumbnail` e,
+  opcionais, `centerCol` e `centerRow`, 10 envios por minuto). O tipo vem dos
+  bytes, nunca do nome ou do MIME declarado: só PNG, JPEG e WebP estático
+  passam, com até 3 MB e 8192 px de lado. Até 40 mapas, 12 áreas por mapa e
+  300 MB no total.
+- Novas áreas chegam ocultas para os jogadores, para o mestre posicionar antes
+  de revelar.
+- `GET /api/maps/areas/:id/image` e `GET /api/maps/areas/:id/thumbnail`, com
+  `Cache-Control: private, immutable` e `Content-Security-Policy:
+  default-src 'none'`. Jogador só recebe as áreas visíveis do mapa na mesa, e
+  miniaturas são só do mestre.
+- Eventos `map:rename`, `map:activate`, `map:delete`, `area:update` e
+  `area:delete` (só o mestre), e `map:created`, `map:updated`, `map:deleted` e
+  `scene:changed`. A cena dos jogadores leva só as áreas visíveis, sem nomes.
+- Cache em memória de 32 MB para as imagens, para uma troca de cena custar
+  uma leitura no banco em vez de uma por jogador.
+
 ## 0.4.2 (2026-11-11)
 
 Desempenho do tempo real e reforço de segurança.

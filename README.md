@@ -115,6 +115,8 @@ src/
     ├── users/                    identidade, credenciais e hash de senha
     ├── auth/                     login, emissão e verificação de JWT, guards
     ├── chat/                     mensagens, gramática de dados e sorteio
+    ├── sheets/                   fichas de personagem e permissões por dono
+    ├── maps/                     imagens de mapa, cena ativa e envio por HTTP
     └── tabletop/                 tokens, permissões, presença e gateway /table
 ```
 
@@ -264,6 +266,7 @@ provedor está em [docs/deploy.md](docs/deploy.md).
 - [Arquitetura](docs/arquitetura.md): camadas, regra de dependência e como criar um módulo.
 - [Autenticação e segurança](docs/autenticacao.md): fluxo de login, JWT, throttling e guards em HTTP e WebSocket.
 - [Tempo real](docs/tempo-real.md): protocolo do namespace `/table`, permissões, chat, dados, presença e limites.
+- [Mapas](docs/mapas.md): onde as imagens ficam, envio, validação, limites e eventos da cena.
 - [Deploy](docs/deploy.md): Render, Neon, Supabase e rotação de segredos.
 - [Changelog](CHANGELOG.md): o que mudou em cada versão da API.
 

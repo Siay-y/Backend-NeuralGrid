@@ -1,4 +1,6 @@
 import type { DataSourceOptions } from 'typeorm';
+import { MapOrmEntity } from '../../modules/maps/infrastructure/persistence/typeorm/map.orm-entity';
+import { MapAreaOrmEntity } from '../../modules/maps/infrastructure/persistence/typeorm/map-area.orm-entity';
 import { ChatMessageOrmEntity } from '../../modules/chat/infrastructure/persistence/typeorm/entities/chat-message.orm-entity';
 import { SheetOrmEntity } from '../../modules/sheets/infrastructure/persistence/typeorm/sheet.orm-entity';
 import { DrawingOrmEntity } from '../../modules/tabletop/infrastructure/persistence/typeorm/entities/drawing.orm-entity';
@@ -14,6 +16,7 @@ import { CreateDrawings1765756800000 } from './migrations/1765756800000-create-d
 import { CreateCharacterSheets1766361600000 } from './migrations/1766361600000-create-character-sheets';
 import { AddSheetVisibility1766966400000 } from './migrations/1766966400000-add-sheet-visibility';
 import { AddSheetStatsVisibility1767571200000 } from './migrations/1767571200000-add-sheet-stats-visibility';
+import { CreateMaps1768176000000 } from './migrations/1768176000000-create-maps';
 
 export interface DatabaseSettings {
   url: string;
@@ -48,6 +51,8 @@ export function buildDataSourceOptions(
       ChatMessageOrmEntity,
       DrawingOrmEntity,
       SheetOrmEntity,
+      MapOrmEntity,
+      MapAreaOrmEntity,
     ],
     migrations: [
       CreateUsers1762790400000,
@@ -59,6 +64,7 @@ export function buildDataSourceOptions(
       CreateCharacterSheets1766361600000,
       AddSheetVisibility1766966400000,
       AddSheetStatsVisibility1767571200000,
+      CreateMaps1768176000000,
     ],
     migrationsTableName: 'typeorm_migrations',
     uuidExtension: 'pgcrypto',

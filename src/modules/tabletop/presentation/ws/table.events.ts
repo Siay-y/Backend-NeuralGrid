@@ -17,6 +17,11 @@ export const TableClientEvent = {
   CreateSheet: 'sheet:create',
   UpdateSheet: 'sheet:update',
   DeleteSheet: 'sheet:delete',
+  RenameMap: 'map:rename',
+  ActivateMap: 'map:activate',
+  DeleteMap: 'map:delete',
+  UpdateArea: 'area:update',
+  DeleteArea: 'area:delete',
 } as const;
 
 export const TableServerEvent = {
@@ -36,6 +41,10 @@ export const TableServerEvent = {
   SheetUpdated: 'sheet:updated',
   SheetDeleted: 'sheet:deleted',
   SheetStats: 'sheet:stats',
+  MapCreated: 'map:created',
+  MapUpdated: 'map:updated',
+  MapDeleted: 'map:deleted',
+  SceneChanged: 'scene:changed',
   SessionExpired: 'session:expired',
   ConnectionLimit: 'session:limit',
 } as const;

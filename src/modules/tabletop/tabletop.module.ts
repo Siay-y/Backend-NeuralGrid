@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { ChatModule } from '../chat/chat.module';
+import { MapsModule } from '../maps/maps.module';
 import { SheetsModule } from '../sheets/sheets.module';
 import { UsersModule } from '../users/users.module';
 import { TokenOwnerValidator } from './application/services/token-owner-validator';
@@ -33,6 +34,7 @@ import { TableGateway } from './presentation/ws/table.gateway';
     AuthModule,
     ChatModule,
     SheetsModule,
+    MapsModule,
   ],
   providers: [
     { provide: TokenRepository, useClass: TypeOrmTokenRepository },
