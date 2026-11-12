@@ -31,6 +31,12 @@ interface SceneData {
   scene: { id: string; areas: Record<string, unknown>[] } | null;
 }
 
+interface MemoryData {
+  mapId: string | null;
+  points: number[];
+  reset: boolean;
+}
+
 interface Ack<T> {
   ok: boolean;
   data?: T;
@@ -142,7 +148,7 @@ describe('Maps (e2e)', () => {
     await data.query('TRUNCATE TABLE "maps" CASCADE');
     await data.query('TRUNCATE TABLE "users" CASCADE');
     await data.query(
-      'UPDATE "table_settings" SET "fog_enabled" = false, "light_radius" = 6',
+      'UPDATE "table_settings" SET "fog_enabled" = false, "light_radius" = 6, "fog_memory" = false',
     );
     const provision = app.get(ProvisionUserUseCase);
     for (const [username, role] of [
@@ -173,7 +179,7 @@ describe('Maps (e2e)', () => {
     const data = app.get(DataSource);
     await data.query('TRUNCATE TABLE "maps" CASCADE');
     await data.query(
-      'UPDATE "table_settings" SET "fog_enabled" = false, "light_radius" = 6',
+      'UPDATE "table_settings" SET "fog_enabled" = false, "light_radius" = 6, "fog_memory" = false',
     );
     await app.close();
   });
@@ -322,7 +328,11 @@ describe('Maps (e2e)', () => {
   it('shares the fog settings and lets only the master change them', async () => {
     const master = await open(sessions.mestre);
     const player = await open(sessions.jogador1);
-    expect(player.snapshot.fog).toEqual({ enabled: false, radius: 6 });
+    expect(player.snapshot.fog).toEqual({
+      enabled: false,
+      radius: 6,
+      memory: false,
+    });
 
     const refused = await send(player.socket, 'fog:update', { enabled: true });
     expect(refused.error?.code).toBe('MAP_FORBIDDEN');
@@ -334,10 +344,65 @@ describe('Maps (e2e)', () => {
       enabled: true,
       radius: 8,
     });
-    expect(saved.data).toEqual({ enabled: true, radius: 8 });
-    expect((await changed).fog).toEqual({ enabled: true, radius: 8 });
+    const fog = { enabled: true, radius: 8, memory: false };
+    expect(saved.data).toEqual(fog);
+    expect((await changed).fog).toEqual(fog);
 
     const rejoined = await open(sessions.jogador1);
-    expect(rejoined.snapshot.fog).toEqual({ enabled: true, radius: 8 });
+    expect(rejoined.snapshot.fog).toEqual(fog);
+  });
+
+  it('remembers where lit tokens walked and lets only the master forget it', async () => {
+    const { body: map } = await upload(sessions.mestre, png(800, 600), {
+      name: 'Trilha',
+    }).expect(201);
+    const master = await open(sessions.mestre);
+    const player = await open(sessions.jogador1);
+    const playerId = (player.snapshot.you as { id: string }).id;
+    const masterId = (master.snapshot.you as { id: string }).id;
+    await send(master.socket, 'map:activate', { id: (map as MapData).id });
+    await send(master.socket, 'fog:update', { enabled: true, memory: true });
+
+    const kael = await send<{ id: string }>(master.socket, 'token:create', {
+      label: 'Kael',
+      kind: 'agent',
+      ownerId: playerId,
+      col: 0,
+      row: 0,
+    });
+    await send(master.socket, 'token:create', {
+      label: 'Lich',
+      kind: 'threat',
+      ownerId: masterId,
+      emitsLight: false,
+      col: 30,
+      row: 30,
+    });
+    const walked = next<MemoryData>(player.socket, 'fog:memory');
+    await send(player.socket, 'token:move', {
+      id: kael.data!.id,
+      col: 8,
+      row: 0,
+    });
+    const trail = await walked;
+    expect(trail.mapId).toBe((map as MapData).id);
+    expect(trail.reset).toBe(false);
+    expect(trail.points.length).toBeGreaterThanOrEqual(4);
+
+    const rejoined = await open(sessions.jogador1);
+    const memory = rejoined.snapshot.fogMemory as MemoryData;
+    expect(memory.mapId).toBe((map as MapData).id);
+    expect(memory.points).toEqual(expect.arrayContaining([1, 1, 17]));
+    expect(memory.points.some((value) => value > 40)).toBe(false);
+
+    const refused = await send(player.socket, 'fog:forget', {});
+    expect(refused.error?.code).toBe('MAP_FORBIDDEN');
+    const cleared = next<MemoryData>(player.socket, 'fog:memory');
+    expect((await send(master.socket, 'fog:forget', {})).ok).toBe(true);
+    expect(await cleared).toEqual({
+      mapId: (map as MapData).id,
+      points: [],
+      reset: true,
+    });
   });
 });

@@ -116,11 +116,14 @@ linha só (`id = 1`):
 | --- | --- |
 | `fog_enabled` | se os jogadores enxergam só perto das luzes |
 | `light_radius` | alcance da luz em quadrados, de 2 a 20, 6 por padrão |
+| `fog_memory` | se os lugares já visitados ficam à meia luz |
 
 | Evento | Quem pode | Payload |
 | --- | --- | --- |
-| `fog:update` | mestre | `{ enabled?, radius? }` |
-| `fog:changed` | todos, do servidor | `{ fog: { enabled, radius } }` |
+| `fog:update` | mestre | `{ enabled?, radius?, memory? }` |
+| `fog:changed` | todos, do servidor | `{ fog: { enabled, radius, memory } }` |
+| `fog:forget` | mestre | `{}`, apaga a memória do mapa na mesa |
+| `fog:memory` | todos, do servidor | `{ mapId, points, reset }` |
 
 O snapshot traz `fog`. O servidor só guarda a configuração: cada navegador
 acende uma luz no centro de cada token que tem dono e `emitsLight`, com o
@@ -131,13 +134,30 @@ A névoa esconde o que o navegador desenha, não os dados. A imagem do mapa e os
 tokens no escuro continuam chegando ao jogador. Para um segredo de verdade, o
 mestre usa uma área oculta ou um token oculto, que nunca saem do servidor.
 
+### Memória da névoa
+
+Com `fog_memory` ligado, o servidor guarda por onde as luzes passaram, por mapa,
+na tabela `fog_explored` (`map_id`, `x2`, `y2`, apagada junto com o mapa). Cada
+ponto é o centro de uma luz em meios quadrados, por isso `x2` e `y2`.
+
+| Quando | O que entra na memória |
+| --- | --- |
+| Token criado, editado ou movido | o caminho da posição antiga até a nova, a cada meio alcance, até 64 pontos |
+| Névoa ou memória ligadas | a posição de cada luz na mesa |
+| Mapa trocado | a posição de cada luz no mapa novo |
+
+Só deixa rastro o token com dono, com `emitsLight` e que não está oculto. Cada
+mapa guarda até 20.000 pontos. `fog:memory` com `reset: false` traz só os pontos
+novos; com `reset: true` (troca de mapa ou `fog:forget`) traz a lista inteira. O
+snapshot traz `fogMemory` do mapa na mesa.
+
 ## Testes
 
 `map-image.spec.ts` monta cabeçalhos byte a byte de cada formato e de arquivos
 falsos. `map-use-cases.spec.ts` cobre permissões, limites, posição das áreas
 novas, cena única, áreas ocultas, o que o jogador pode ler e o cache.
-`fog-use-cases.spec.ts` cobre o padrão da névoa, as permissões e os limites do
-alcance. `test/maps.e2e-spec.ts` envia arquivos de verdade
+`fog-use-cases.spec.ts` cobre o padrão da névoa, as permissões, os limites do
+alcance e a memória. `fog-memory.spec.ts` cobre o caminho entre duas posições. `test/maps.e2e-spec.ts` envia arquivos de verdade
 por HTTP, tenta SVG disfarçado e arquivo grande demais, confere os cabeçalhos da
 resposta e acompanha pelo socket a troca de cena, a revelação de uma área e a
 névoa chegando ao jogador.

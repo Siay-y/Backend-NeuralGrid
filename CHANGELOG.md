@@ -6,6 +6,20 @@ do roadmap e o patch a cada melhoria ou correção. As notas para os jogadores
 ficam na aba Atualizações do
 [frontend](https://github.com/Siay-y/Frontend-NeuralGrid).
 
+## 0.6.2 (2026-11-12)
+
+### Novo
+
+- Memória da névoa: `fog_memory` em `table_settings` e `memory` em
+  `fog:update`. Com ela ligada, o servidor guarda por mapa, em `fog_explored`,
+  o caminho por onde passaram os tokens com dono, com luz e visíveis, e envia
+  `fog:memory` a todos. O snapshot traz `fogMemory`. O mestre apaga a memória do
+  mapa na mesa com `fog:forget`. Migration `AddFogMemory`.
+
+### Mudou
+
+- `MoveTokenUseCase` devolve `{ token, from }`, com a posição de antes.
+
 ## 0.6.1 (2026-11-12)
 
 ### Novo

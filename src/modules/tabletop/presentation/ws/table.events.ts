@@ -23,6 +23,7 @@ export const TableClientEvent = {
   UpdateArea: 'area:update',
   DeleteArea: 'area:delete',
   UpdateFog: 'fog:update',
+  ForgetFog: 'fog:forget',
 } as const;
 
 export const TableServerEvent = {
@@ -47,6 +48,7 @@ export const TableServerEvent = {
   MapDeleted: 'map:deleted',
   SceneChanged: 'scene:changed',
   FogChanged: 'fog:changed',
+  FogMemory: 'fog:memory',
   SessionExpired: 'session:expired',
   ConnectionLimit: 'session:limit',
 } as const;

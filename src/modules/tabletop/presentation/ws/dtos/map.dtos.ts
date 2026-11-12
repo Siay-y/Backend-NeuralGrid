@@ -80,4 +80,10 @@ export class UpdateFogDto {
   @Min(2, { message: RADIUS_MESSAGE })
   @Max(20, { message: RADIUS_MESSAGE })
   radius?: number;
+
+  @IsOptional()
+  @IsBoolean({
+    message: 'Informe se a névoa lembra o caminho com verdadeiro ou falso',
+  })
+  memory?: boolean;
 }

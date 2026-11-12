@@ -22,6 +22,9 @@ export class TableSettingsOrmEntity {
   @Column({ name: 'light_radius', type: 'smallint', default: 6 })
   lightRadius: number;
 
+  @Column({ name: 'fog_memory', type: 'boolean', default: false })
+  fogMemory: boolean;
+
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 }
