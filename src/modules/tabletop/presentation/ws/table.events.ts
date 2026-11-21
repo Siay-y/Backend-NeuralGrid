@@ -32,6 +32,9 @@ export const TableClientEvent = {
   StepTurn: 'combat:step',
   PassTurn: 'combat:pass',
   EndCombat: 'combat:end',
+  ApplyStatus: 'status:apply',
+  RemoveStatus: 'status:remove',
+  ReviveSheet: 'death:revive',
 } as const;
 
 export const TableServerEvent = {
@@ -58,6 +61,8 @@ export const TableServerEvent = {
   FogChanged: 'fog:changed',
   FogMemory: 'fog:memory',
   CombatChanged: 'combat:changed',
+  StatusChanged: 'status:changed',
+  DeathEvent: 'death:event',
   SessionExpired: 'session:expired',
   ConnectionLimit: 'session:limit',
 } as const;

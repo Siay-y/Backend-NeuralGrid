@@ -8,6 +8,7 @@ import { SheetOrmEntity } from '../../modules/sheets/infrastructure/persistence/
 import { DrawingOrmEntity } from '../../modules/tabletop/infrastructure/persistence/typeorm/entities/drawing.orm-entity';
 import { TokenOrmEntity } from '../../modules/tabletop/infrastructure/persistence/typeorm/entities/token.orm-entity';
 import { CombatOrmEntity } from '../../modules/tabletop/infrastructure/persistence/typeorm/entities/combat.orm-entity';
+import { TokenStatusOrmEntity } from '../../modules/tabletop/infrastructure/persistence/typeorm/entities/token-status.orm-entity';
 import { UserOrmEntity } from '../../modules/users/infrastructure/persistence/typeorm/entities/user.orm-entity';
 import { DatabaseSslMode } from './database-ssl-mode';
 import { CreateUsers1762790400000 } from './migrations/1762790400000-create-users';
@@ -24,6 +25,7 @@ import { CreateTableSettings1768780800000 } from './migrations/1768780800000-cre
 import { AddTokenLight1768867200000 } from './migrations/1768867200000-add-token-light';
 import { AddFogMemory1768953600000 } from './migrations/1768953600000-add-fog-memory';
 import { CreateCombat1769040000000 } from './migrations/1769040000000-create-combat';
+import { CreateTokenStatuses1769126400000 } from './migrations/1769126400000-create-token-statuses';
 
 export interface DatabaseSettings {
   url: string;
@@ -63,6 +65,7 @@ export function buildDataSourceOptions(
       TableSettingsOrmEntity,
       FogExploredOrmEntity,
       CombatOrmEntity,
+      TokenStatusOrmEntity,
     ],
     migrations: [
       CreateUsers1762790400000,
@@ -79,6 +82,7 @@ export function buildDataSourceOptions(
       AddTokenLight1768867200000,
       AddFogMemory1768953600000,
       CreateCombat1769040000000,
+      CreateTokenStatuses1769126400000,
     ],
     migrationsTableName: 'typeorm_migrations',
     uuidExtension: 'pgcrypto',

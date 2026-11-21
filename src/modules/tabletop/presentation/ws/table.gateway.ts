@@ -23,6 +23,7 @@ import { SendMessageUseCase } from '../../../chat/application/use-cases/send-mes
 import { AuthenticateAccessTokenUseCase } from '../../../auth/application/use-cases/authenticate-access-token.use-case';
 import {
   publicStats,
+  type SheetChange,
   type SheetView,
 } from '../../../sheets/application/dtos/sheet-view';
 import {
@@ -99,8 +100,25 @@ import {
   StartCombatUseCase,
   StepTurnUseCase,
 } from '../../application/use-cases/combat-use-cases';
+import type {
+  StatusChange,
+  TokenStatusesView,
+} from '../../application/dtos/status-view';
+import {
+  ApplyStatusUseCase,
+  ListStatusesUseCase,
+  RemoveStatusUseCase,
+} from '../../application/use-cases/status-use-cases';
+import {
+  type DeathEvent,
+  type DeathOutcome,
+  DeathWatch,
+} from '../../application/use-cases/death-use-cases';
+import { TickStatusesUseCase } from '../../application/use-cases/tick-statuses.use-case';
+import { HIDDEN_TOKEN_NAME } from '../../application/dtos/token-view';
 import type { TableActor } from '../../domain/policies/token-policy';
 import { RollDiceDto, SendMessageDto } from './dtos/chat.dtos';
+import { ApplyStatusDto, StatusTargetDto } from './dtos/status.dtos';
 import {
   ClearDrawingsDto,
   CreateDrawingDto,
@@ -231,6 +249,11 @@ export class TableGateway
     private readonly passOwnTurn: PassTurnUseCase,
     private readonly endCombat: EndCombatUseCase,
     private readonly dropFromCombat: DropFromCombatUseCase,
+    private readonly listStatuses: ListStatusesUseCase,
+    private readonly applyStatus: ApplyStatusUseCase,
+    private readonly removeStatus: RemoveStatusUseCase,
+    private readonly tickStatuses: TickStatusesUseCase,
+    private readonly deaths: DeathWatch,
   ) {}
 
   afterInit(namespace: Namespace): void {
@@ -292,6 +315,7 @@ export class TableGateway
         fog,
         fogMemory,
         combat,
+        statuses,
       ] = await Promise.all([
         this.listTokens.execute(actor),
         this.listUsers.execute(),
@@ -304,6 +328,7 @@ export class TableGateway
         this.getFog.execute(),
         this.getFogMemory.execute(),
         this.getCombat.execute(),
+        this.listStatuses.execute(actor),
       ]);
       socket.emit(TableServerEvent.Snapshot, {
         you: user,
@@ -323,6 +348,7 @@ export class TableGateway
         fog,
         fogMemory,
         combat: viewForActor(combat, actor),
+        statuses,
       });
     } catch (error) {
       this.logger.error(error instanceof Error ? error.stack : String(error));
@@ -386,6 +412,7 @@ export class TableGateway
       await this.explore([{ token, from: null }]);
       if (token.hidden !== wasHidden) {
         await this.refreshCombat([token.id]);
+        await this.revealStatuses(wasHidden ? [token.id] : []);
       }
       return token;
     });
@@ -398,6 +425,7 @@ export class TableGateway
   ): Promise<WsResult<TokenView>> {
     return this.run(socket, async (actor) => {
       const dto = await parsePayload(TokenPositionDto, body);
+      await this.deaths.assertCanAct(actor, dto.id);
       const { token, from } = await this.moveToken.execute(actor, dto);
       this.publishToken(TableServerEvent.TokenUpdated, token, token.hidden);
       await this.explore([{ token, from }]);
@@ -412,6 +440,7 @@ export class TableGateway
   ): Promise<WsResult<null>> {
     return this.run(socket, async (actor) => {
       const dto = await parsePayload(TokenPositionDto, body);
+      await this.deaths.assertCanAct(actor, dto.id);
       const { preview, hidden } = await this.authorizeDrag.execute(actor, dto);
       const audience = hidden ? socket.to(MASTERS_ROOM) : socket.broadcast;
       audience.emit(TableServerEvent.TokenDragged, preview);
@@ -579,24 +608,11 @@ export class TableGateway
   ): Promise<WsResult<SheetView>> {
     return this.run(socket, async (actor) => {
       const dto = await parsePayload(UpdateSheetDto, body);
-      const { sheet, previousOwnerId, identityChanged, statsChanged } =
-        await this.updateSheet.execute(actor, dto);
-      if (previousOwnerId !== null && previousOwnerId !== sheet.ownerId) {
-        this.server
-          .to(userRoom(previousOwnerId))
-          .except(MASTERS_ROOM)
-          .emit(TableServerEvent.SheetDeleted, { id: sheet.id });
-      }
-      this.sheetAudience(sheet.ownerId).emit(
-        TableServerEvent.SheetUpdated,
-        sheet,
-      );
-      if (statsChanged) {
-        this.server.emit(TableServerEvent.SheetStats, {
-          id: sheet.id,
-          stats: publicStats(sheet),
-        });
-      }
+      await this.deaths.assertSheetAlive(actor, dto.id);
+      const change = await this.updateSheet.execute(actor, dto);
+      const { sheet, identityChanged } = change;
+      this.publishSheet(change);
+      this.publishDeaths(await this.deaths.review(sheet));
       if (identityChanged) {
         const changes = await this.syncSheetTokens.execute(sheet);
         for (const change of changes) {
@@ -611,6 +627,11 @@ export class TableGateway
             .filter(({ token, wasHidden }) => token.hidden !== wasHidden)
             .map(({ token }) => token.id),
         );
+        await this.revealStatuses(
+          changes
+            .filter(({ token, wasHidden }) => wasHidden && !token.hidden)
+            .map(({ token }) => token.id),
+        );
       }
       return sheet;
     });
@@ -623,6 +644,7 @@ export class TableGateway
   ): Promise<WsResult<SheetRemoval>> {
     return this.run(socket, async (actor) => {
       const dto = await parsePayload(SheetIdDto, body);
+      await this.deaths.assertSheetAlive(actor, dto.id);
       const removal = await this.deleteSheet.execute(actor, dto.id);
       this.sheetAudience(removal.ownerId).emit(TableServerEvent.SheetDeleted, {
         id: removal.id,
@@ -794,7 +816,12 @@ export class TableGateway
   beginCombat(
     @ConnectedSocket() socket: TableSocket,
   ): Promise<WsResult<CombatView>> {
-    return this.conduct(socket, (actor) => this.startCombat.execute(actor));
+    return this.run(socket, async (actor) => {
+      const views = await this.startCombat.execute(actor);
+      this.tickStatuses.restart();
+      this.publishCombat(views);
+      return (await this.startTurn(actor, views)).master;
+    });
   }
 
   @SubscribeMessage(TableClientEvent.StepTurn)
@@ -802,13 +829,17 @@ export class TableGateway
     @ConnectedSocket() socket: TableSocket,
     @MessageBody() body: unknown,
   ): Promise<WsResult<CombatView>> {
-    return this.conduct(socket, async (actor) => {
+    return this.run(socket, async (actor) => {
       const dto = await parsePayload(StepTurnDto, body);
       const expected =
         dto.round === undefined
           ? undefined
           : { round: dto.round, turnId: dto.turnId ?? null };
-      return this.stepTurn.execute(actor, dto.step, expected);
+      const views = await this.stepTurn.execute(actor, dto.step, expected);
+      this.publishCombat(views);
+      return dto.step === 1
+        ? (await this.startTurn(actor, views)).master
+        : views.master;
     });
   }
 
@@ -821,7 +852,7 @@ export class TableGateway
       const dto = await parsePayload(CombatantIdDto, body);
       const views = await this.passOwnTurn.execute(actor, dto.tokenId);
       this.publishCombat(views);
-      return viewForActor(views, actor);
+      return viewForActor(await this.startTurn(actor, views), actor);
     });
   }
 
@@ -829,7 +860,176 @@ export class TableGateway
   finishCombat(
     @ConnectedSocket() socket: TableSocket,
   ): Promise<WsResult<CombatView>> {
-    return this.conduct(socket, (actor) => this.endCombat.execute(actor));
+    return this.conduct(socket, async (actor) => {
+      const views = await this.endCombat.execute(actor);
+      this.tickStatuses.restart();
+      return views;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.ApplyStatus)
+  addStatus(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<TokenStatusesView>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(ApplyStatusDto, body);
+      const change = await this.applyStatus.execute(actor, {
+        tokenId: dto.tokenId,
+        kind: dto.kind,
+        turns: dto.turns ?? null,
+        amount: dto.amount ?? null,
+        immuneTo: dto.immuneTo ?? [],
+      });
+      const view = this.publishStatuses(change);
+      if (dto.kind === 'death') {
+        this.publishDeaths(await this.deaths.announce(change));
+      }
+      return view;
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.RemoveStatus)
+  dropStatus(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<TokenStatusesView>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(StatusTargetDto, body);
+      if (dto.kind === 'death') {
+        const outcome = await this.deaths.revive(actor, dto.tokenId);
+        this.publishDeaths(outcome);
+        return {
+          tokenId: dto.tokenId,
+          statuses: outcome.changes[0]?.statuses ?? [],
+        };
+      }
+      const change = await this.removeStatus.execute(
+        actor,
+        dto.tokenId,
+        dto.kind,
+      );
+      return this.publishStatuses(change);
+    });
+  }
+
+  @SubscribeMessage(TableClientEvent.ReviveSheet)
+  revive(
+    @ConnectedSocket() socket: TableSocket,
+    @MessageBody() body: unknown,
+  ): Promise<WsResult<{ id: string }>> {
+    return this.run(socket, async (actor) => {
+      const dto = await parsePayload(SheetIdDto, body);
+      this.publishDeaths(await this.deaths.reviveSheet(actor, dto.id));
+      return { id: dto.id };
+    });
+  }
+
+  // A fallen or dead combatant cannot act, so its turn passes on by itself
+  // right after the death save, and nobody rolls twice in the same skip run.
+  private async startTurn(
+    actor: TableActor,
+    first: CombatViews,
+  ): Promise<CombatViews> {
+    let views = first;
+    const visited = new Set<string>();
+    try {
+      const author = await this.conductor(actor);
+      while (author) {
+        const { round, turnId } = views.master;
+        if (round === 0 || turnId === null || visited.has(turnId)) {
+          return views;
+        }
+        visited.add(turnId);
+        const tick = await this.tickStatuses.execute(author, {
+          round,
+          tokenId: turnId,
+          secret: views.players.turnId !== turnId,
+        });
+        if (tick) {
+          this.publishDeaths(tick);
+        }
+        if (!tick?.incapacitated) {
+          return views;
+        }
+        views = await this.stepTurn.execute(author, 1, { round, turnId });
+        this.publishCombat(views);
+      }
+    } catch (error) {
+      this.logger.error(error instanceof Error ? error.stack : String(error));
+    }
+    return views;
+  }
+
+  private publishDeaths(outcome: DeathOutcome): void {
+    outcome.events.forEach((event) => this.publishDeath(event));
+    outcome.messages.forEach((message) => this.deliver(message));
+    outcome.sheets.forEach((sheet) => this.publishSheet(sheet));
+    outcome.changes.forEach((change) => this.publishStatuses(change));
+  }
+
+  private publishDeath(event: DeathEvent): void {
+    this.server.to(MASTERS_ROOM).emit(TableServerEvent.DeathEvent, event);
+    if (!event.hidden) {
+      this.server.except(MASTERS_ROOM).emit(TableServerEvent.DeathEvent, {
+        ...event,
+        label: event.nameHidden ? HIDDEN_TOKEN_NAME : event.label,
+      });
+    }
+  }
+
+  // Turn effects are rolled in a master's name, so a secret roll is never
+  // delivered to the player who ended the previous turn.
+  private async conductor(actor: TableActor): Promise<TableActor | null> {
+    if (actor.role === 'master') {
+      return actor;
+    }
+    const master = (await this.listUsers.execute()).find(
+      ({ role }) => role === 'master',
+    );
+    return master ? { id: master.id, role: master.role } : null;
+  }
+
+  private publishStatuses(change: StatusChange): TokenStatusesView {
+    const view = { tokenId: change.tokenId, statuses: change.statuses };
+    this.server.to(MASTERS_ROOM).emit(TableServerEvent.StatusChanged, view);
+    if (!change.hidden) {
+      this.server
+        .except(MASTERS_ROOM)
+        .emit(TableServerEvent.StatusChanged, view);
+    }
+    return view;
+  }
+
+  private async revealStatuses(tokenIds: readonly string[]): Promise<void> {
+    for (const tokenId of tokenIds) {
+      const statuses = await this.listStatuses.ofToken(tokenId);
+      if (statuses.length > 0) {
+        this.server
+          .except(MASTERS_ROOM)
+          .emit(TableServerEvent.StatusChanged, { tokenId, statuses });
+      }
+    }
+  }
+
+  private publishSheet(change: SheetChange): void {
+    const { sheet, previousOwnerId, statsChanged } = change;
+    if (previousOwnerId !== null && previousOwnerId !== sheet.ownerId) {
+      this.server
+        .to(userRoom(previousOwnerId))
+        .except(MASTERS_ROOM)
+        .emit(TableServerEvent.SheetDeleted, { id: sheet.id });
+    }
+    this.sheetAudience(sheet.ownerId).emit(
+      TableServerEvent.SheetUpdated,
+      sheet,
+    );
+    if (statsChanged) {
+      this.server.emit(TableServerEvent.SheetStats, {
+        id: sheet.id,
+        stats: publicStats(sheet),
+      });
+    }
   }
 
   private conduct(

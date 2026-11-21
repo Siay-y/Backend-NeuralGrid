@@ -66,6 +66,16 @@ interface CombatData {
   }>;
 }
 
+interface StatusData {
+  tokenId: string;
+  statuses: Array<{
+    kind: string;
+    turns: number | null;
+    amount: string | null;
+    immuneTo: string[];
+  }>;
+}
+
 interface TokenData {
   id: string;
   col: number;
@@ -945,5 +955,199 @@ describe('Table gateway (e2e)', () => {
     const ended = await send<CombatData>(master.socket, 'combat:end', {});
     expect(ended.data).toEqual({ round: 0, turnId: null, combatants: [] });
     await send(master.socket, 'token:delete', { id: lichId });
+  });
+
+  it('applies statuses, rolls them at the start of the turn and keeps hidden ones from players', async () => {
+    const master = await open(sessions.mestre.token);
+    const player = await open(sessions.jogador1.token);
+    await send(master.socket, 'combat:end', {});
+
+    const sheet = await send<SheetData>(master.socket, 'sheet:create', {
+      ownerId: sessions.jogador1.userId,
+      data: {
+        identity: { name: 'Kael' },
+        status: { hp: { current: 10, max: 12 } },
+      },
+    });
+    const hero = await send<TokenData>(master.socket, 'token:create', {
+      label: 'Kael',
+      kind: 'agent',
+      ownerId: sessions.jogador1.userId,
+      sheetId: sheet.data!.id,
+      col: 0,
+      row: 0,
+    });
+    const spy = await send<TokenData>(master.socket, 'token:create', {
+      label: 'Espiã',
+      kind: 'threat',
+      hidden: true,
+      col: 4,
+      row: 0,
+    });
+    const heroId = hero.data!.id;
+    const spyId = spy.data!.id;
+
+    const refused = await send(player.socket, 'status:apply', {
+      tokenId: heroId,
+      kind: 'poison',
+    });
+    expect(refused.error?.code).toBe('STATUS_FORBIDDEN');
+    const unknown = await send(master.socket, 'status:apply', {
+      tokenId: heroId,
+      kind: 'sleep',
+    });
+    expect(unknown.error?.code).toBe('INVALID_PAYLOAD');
+
+    const playerSees = next<StatusData>(player.socket, 'status:changed');
+    await send(master.socket, 'status:apply', {
+      tokenId: spyId,
+      kind: 'invisible',
+    });
+    await send(master.socket, 'status:apply', {
+      tokenId: heroId,
+      kind: 'poison',
+      turns: 3,
+      amount: '1d4',
+    });
+    expect((await playerSees).tokenId).toBe(heroId);
+
+    const again = await send<StatusData>(master.socket, 'status:apply', {
+      tokenId: heroId,
+      kind: 'poison',
+      turns: 2,
+      amount: '1d2+2',
+    });
+    expect(again.data?.statuses).toEqual([
+      { kind: 'poison', turns: 2, amount: '1d2+2', immuneTo: [] },
+    ]);
+
+    const late = await open(sessions.jogador2.token);
+    expect(
+      (late.snapshot as Snapshot & { statuses: StatusData[] }).statuses,
+    ).toEqual([{ tokenId: heroId, statuses: again.data!.statuses }]);
+
+    await send(master.socket, 'combat:join', { tokenIds: [heroId] });
+    const roll = until<MessageData & { roll: { label: string } | null }>(
+      player.socket,
+      'chat:message',
+      (message) => message.roll?.label === 'Veneno · Kael',
+    );
+    const ticked = until<StatusData>(
+      player.socket,
+      'status:changed',
+      ({ statuses }) => statuses[0]?.turns === 1,
+    );
+    const hurt = next<SheetData>(player.socket, 'sheet:updated');
+    await send(master.socket, 'combat:start', {});
+
+    const total = (await roll).roll!.total;
+    expect([3, 4]).toContain(total);
+    expect((await ticked).tokenId).toBe(heroId);
+    expect((await hurt).data.status.hp).toEqual({
+      current: 10 - total,
+      max: 12,
+    });
+
+    const removed = await send<StatusData>(master.socket, 'status:remove', {
+      tokenId: heroId,
+      kind: 'poison',
+    });
+    expect(removed.data).toEqual({ tokenId: heroId, statuses: [] });
+
+    await send(master.socket, 'combat:end', {});
+    await send(master.socket, 'token:delete', { id: heroId });
+    await send(master.socket, 'token:delete', { id: spyId });
+    await send(master.socket, 'sheet:delete', { id: sheet.data!.id });
+  });
+
+  it('knocks an NPC down, rolls death saves and lets only the master revive', async () => {
+    const master = await open(sessions.mestre.token);
+    const player = await open(sessions.jogador1.token);
+    const ally = await open(sessions.jogador2.token);
+    await send(master.socket, 'combat:end', {});
+
+    const sheet = await send<SheetData>(master.socket, 'sheet:create', {
+      ownerId: sessions.jogador1.userId,
+      kind: 'npc',
+      data: {
+        identity: { name: 'Kael' },
+        status: { hp: { current: 5, max: 12 } },
+        attributes: { resistance: 10 },
+      },
+    });
+    const sheetId = sheet.data!.id;
+    const hero = await send<TokenData>(master.socket, 'token:create', {
+      label: 'Kael',
+      kind: 'npc',
+      ownerId: sessions.jogador1.userId,
+      sheetId,
+      col: 0,
+      row: 0,
+    });
+    const heroId = hero.data!.id;
+
+    const allySees = next<{
+      kind: string;
+      label: string;
+      attemptsLeft: number;
+    }>(ally.socket, 'death:event');
+    await send(master.socket, 'sheet:update', {
+      id: sheetId,
+      data: { status: { hp: { current: -15, max: 12 } } },
+    });
+    expect(await allySees).toMatchObject({
+      kind: 'fell',
+      label: 'Kael',
+      attemptsLeft: 3,
+    });
+
+    const cheat = await send(player.socket, 'sheet:update', {
+      id: sheetId,
+      data: { status: { hp: { current: 12, max: 12 } } },
+    });
+    expect(cheat.error?.code).toBe('CHARACTER_DEAD');
+    const walk = await send(player.socket, 'token:move', {
+      id: heroId,
+      col: 1,
+      row: 0,
+    });
+    expect(walk.error?.code).toBe('CHARACTER_DEAD');
+
+    await send(master.socket, 'combat:join', { tokenIds: [heroId] });
+    const save = until<{ kind: string; roll: number; success: boolean }>(
+      player.socket,
+      'death:event',
+      ({ kind }) => kind === 'save',
+    );
+    const rolled = until<MessageData & { roll: { label: string } | null }>(
+      ally.socket,
+      'chat:message',
+      (message) => message.roll?.label === 'Teste de morte · Kael',
+    );
+    await send(master.socket, 'combat:start', {});
+    const result = await save;
+    expect(result.success).toBe(result.roll >= 15);
+    expect((await rolled).roll!.total).toBe(result.roll);
+
+    const refused = await send(player.socket, 'death:revive', { id: sheetId });
+    expect(refused.error?.code).toBe('STATUS_FORBIDDEN');
+    if (!result.success) {
+      const back = until<{ kind: string }>(
+        player.socket,
+        'death:event',
+        ({ kind }) => kind === 'revived',
+      );
+      await send(master.socket, 'death:revive', { id: sheetId });
+      await back;
+    }
+    const alive = await send<SheetData>(player.socket, 'sheet:update', {
+      id: sheetId,
+      data: { identity: { name: 'Kael', codename: 'Volta' } },
+    });
+    expect(alive.data?.data.status.hp.current).toBe(1);
+
+    await send(master.socket, 'combat:end', {});
+    await send(master.socket, 'token:delete', { id: heroId });
+    await send(master.socket, 'sheet:delete', { id: sheetId });
   });
 });

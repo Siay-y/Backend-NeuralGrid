@@ -355,6 +355,22 @@ export function attributeModifier(value: number): number {
   return Math.floor((value - 10) / 2);
 }
 
+export function shiftHitPoints(hp: Gauge, delta: number): number {
+  if (delta < 0) {
+    return Math.max(-SHEET_LIMITS.gauge, hp.current + delta);
+  }
+  return Math.max(hp.current, Math.min(hp.max, hp.current + delta));
+}
+
+export function deathThreshold(data: SheetData): number {
+  const { resistance } = data.attributes;
+  return -(resistance + attributeModifier(resistance));
+}
+
+export function isBeyondDeath(data: SheetData): boolean {
+  return data.status.hp.current < deathThreshold(data);
+}
+
 export function sheetDefense(data: SheetData): number {
   return data.status.armor + attributeModifier(data.attributes.resistance);
 }

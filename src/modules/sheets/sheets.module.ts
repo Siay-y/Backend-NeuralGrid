@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from '../users/users.module';
 import {
+  AdjustHitPointsUseCase,
   CreateSheetUseCase,
   DeleteSheetUseCase,
   FindSheetUseCase,
@@ -25,6 +26,7 @@ import { TypeOrmSheetRepository } from './infrastructure/persistence/typeorm/typ
     UpdateSheetUseCase,
     DeleteSheetUseCase,
     FindSheetUseCase,
+    AdjustHitPointsUseCase,
   ],
   exports: [
     ListSheetStatsUseCase,
@@ -33,6 +35,7 @@ import { TypeOrmSheetRepository } from './infrastructure/persistence/typeorm/typ
     UpdateSheetUseCase,
     DeleteSheetUseCase,
     FindSheetUseCase,
+    AdjustHitPointsUseCase,
   ],
 })
 export class SheetsModule {}
