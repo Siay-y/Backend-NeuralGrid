@@ -31,7 +31,18 @@ import {
   StartCombatUseCase,
   StepTurnUseCase,
 } from './application/use-cases/combat-use-cases';
+import {
+  ApplyStatusUseCase,
+  ListStatusesUseCase,
+  RemoveStatusUseCase,
+  StatusBook,
+} from './application/use-cases/status-use-cases';
+import { DeathWatch } from './application/use-cases/death-use-cases';
+import { TickStatusesUseCase } from './application/use-cases/tick-statuses.use-case';
 import { CombatRepository } from './domain/repositories/combat.repository';
+import { TokenStatusRepository } from './domain/repositories/token-status.repository';
+import { TokenStatusOrmEntity } from './infrastructure/persistence/typeorm/entities/token-status.orm-entity';
+import { TypeOrmTokenStatusRepository } from './infrastructure/persistence/typeorm/repositories/typeorm-token-status.repository';
 import { CombatOrmEntity } from './infrastructure/persistence/typeorm/entities/combat.orm-entity';
 import { TypeOrmCombatRepository } from './infrastructure/persistence/typeorm/repositories/typeorm-combat.repository';
 import { DrawingRepository } from './domain/repositories/drawing.repository';
@@ -49,6 +60,7 @@ import { TableGateway } from './presentation/ws/table.gateway';
       TokenOrmEntity,
       DrawingOrmEntity,
       CombatOrmEntity,
+      TokenStatusOrmEntity,
     ]),
     UsersModule,
     AuthModule,
@@ -60,6 +72,13 @@ import { TableGateway } from './presentation/ws/table.gateway';
     { provide: TokenRepository, useClass: TypeOrmTokenRepository },
     { provide: DrawingRepository, useClass: TypeOrmDrawingRepository },
     { provide: CombatRepository, useClass: TypeOrmCombatRepository },
+    { provide: TokenStatusRepository, useClass: TypeOrmTokenStatusRepository },
+    StatusBook,
+    ListStatusesUseCase,
+    ApplyStatusUseCase,
+    RemoveStatusUseCase,
+    TickStatusesUseCase,
+    DeathWatch,
     CombatTracker,
     GetCombatUseCase,
     JoinCombatUseCase,

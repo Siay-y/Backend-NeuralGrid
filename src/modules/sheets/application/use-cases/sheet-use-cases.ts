@@ -10,7 +10,10 @@ import {
   SheetPolicy,
 } from '../../domain/policies/sheet-policy';
 import { SheetRepository } from '../../domain/repositories/sheet.repository';
-import type { SheetKind } from '../../domain/value-objects/sheet-data';
+import {
+  type SheetKind,
+  shiftHitPoints,
+} from '../../domain/value-objects/sheet-data';
 import {
   publicStats,
   sameIdentity,
@@ -211,5 +214,35 @@ export class FindSheetUseCase {
   async execute(id: string): Promise<SheetView | null> {
     const sheet = await this.sheets.findById(id);
     return sheet ? toSheetView(sheet) : null;
+  }
+}
+
+@Injectable()
+export class AdjustHitPointsUseCase {
+  constructor(private readonly sheets: SheetRepository) {}
+
+  async execute(id: string, delta: number): Promise<SheetChange | null> {
+    const sheet = await this.sheets.findById(id);
+    if (!sheet) {
+      return null;
+    }
+    const { status } = sheet.data;
+    const current = shiftHitPoints(status.hp, delta);
+    if (current === status.hp.current) {
+      return null;
+    }
+    const updated = sheet.edit(
+      { data: { status: { ...status, hp: { ...status.hp, current } } } },
+      new Date(),
+    );
+    await this.sheets.save(updated);
+    const before = toSheetView(sheet);
+    const view = toSheetView(updated);
+    return {
+      sheet: view,
+      previousOwnerId: sheet.ownerId,
+      identityChanged: false,
+      statsChanged: !sameStats(before, view),
+    };
   }
 }

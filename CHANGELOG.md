@@ -6,6 +6,36 @@ do roadmap e o patch a cada melhoria ou correção. As notas para os jogadores
 ficam na aba Atualizações do
 [frontend](https://github.com/Siay-y/Frontend-NeuralGrid).
 
+## 0.8.0 (2026-11-13)
+
+### Novo
+
+- Status: tabela `token_statuses` (migration `CreateTokenStatuses`), com um
+  status de cada tipo por token, e os eventos `status:apply` e `status:remove`,
+  só do mestre. Cada mudança manda `status:changed`; os jogadores não recebem
+  os status de tokens ocultos. O snapshot traz `statuses`.
+- No início de cada turno, o dano e a cura dos status são rolados no chat e
+  aplicados ao HP da ficha ligada ao token. A duração cai a cada turno.
+- Imunidade bloqueia os debuffs escolhidos e tira os que já estavam ativos.
+- Morte: quando o HP da ficha fica abaixo de -(Resistência + Mod de
+  Resistência), o token recebe o status `death`. Ameaças morrem na hora;
+  Agentes e NPCs caem com 3 tentativas. No início de cada turno de quem caiu, o
+  servidor rola "Teste de morte" (1d20): 15 ou mais o
+  acorda com 1 de vida; menos gasta uma tentativa, e sem tentativas a morte
+  fica sem limite. HP positivo de novo encerra os testes. O evento
+  `death:event` (`fell`, `save`, `killed`, `revived`) avisa a mesa, e
+  `death:revive` deixa o mestre trazer de volta pela ficha. Remover `death`
+  revive e devolve 1 de vida. Imunidade a Morte impede a queda.
+- Personagem caído ou morto não age: o turno dele passa sozinho depois do
+  teste, e o jogador não move o token nem edita ou apaga a ficha
+  (`CHARACTER_DEAD`).
+
+### Mudou
+
+- `combat:start`, `combat:step` e `combat:pass` passam a rolar os status do
+  token que recebe a vez e respondem com o combate depois dos turnos pulados.
+- O dano dos status pode deixar o HP negativo (até -9999).
+
 ## 0.7.0 (2026-11-12)
 
 ### Novo

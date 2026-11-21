@@ -56,6 +56,9 @@ fire-and-forget.
 | `combat:step` | mestre | `{ step: 1 ou -1, round?, turnId? }` | combate |
 | `combat:pass` | dono do token da vez | `{ tokenId }` | combate na visão de quem pediu |
 | `combat:end` | mestre | nenhum | combate vazio |
+| `status:apply` | mestre | `{ tokenId, kind, turns?, amount?, immuneTo? }` | `{ tokenId, statuses }` |
+| `status:remove` | mestre | `{ tokenId, kind }` | `{ tokenId, statuses }` |
+| `death:revive` | mestre | `{ id }` da ficha | `{ id }` |
 
 ### Servidor para cliente
 
@@ -71,6 +74,8 @@ fire-and-forget.
 | `chat:message` | mensagem ou rolagem nova que você pode ver | mensagem |
 | `chat:cleared` | o mestre limpou o chat | `{ by, removed }` |
 | `combat:changed` | o combate mudou | `{ combat }`, na visão de quem recebe |
+| `status:changed` | os status de um token mudaram | `{ tokenId, statuses }` |
+| `death:event` | alguém caiu, rolou o teste de morte, morreu ou voltou | `{ kind, tokenId, label, ownerId, attemptsLeft, failures, roll, success, message }` |
 
 `members` traz só `id`, `displayName` e `role`. O nome de login e o hash nunca
 saem do servidor.
@@ -87,6 +92,9 @@ saem do servidor.
 | `CHAT_FORBIDDEN` | só o mestre limpa o chat de toda a mesa |
 | `COMBAT_FORBIDDEN` | só o mestre conduz o combate |
 | `INVALID_COMBAT` | iniciativa fora de -99 a 999, mais de 40 participantes, token fora do combate ou combate sem começar |
+| `STATUS_FORBIDDEN` | só o mestre aplica ou remove status |
+| `CHARACTER_DEAD` | o jogador tentou mover o token ou editar a ficha de um personagem caído ou morto |
+| `INVALID_STATUS` | duração fora de 1 a 99, valor num status que não usa valor, imunidade sem efeito, efeito ao qual o token é imune ou status que o token não tem |
 | `INVALID_MESSAGE` | texto vazio ou longo demais, sussurro sem destinatário ou para si mesmo |
 | `RATE_LIMITED` | eventos rápidos demais neste socket |
 | `INTERNAL` | erro inesperado, registrado no log do servidor |
@@ -167,6 +175,54 @@ com `hidden: false`. O jogador recebe só os participantes visíveis com token
 visível, e `turnId` vira `null` quando a vez é de alguém que ele não vê. O
 mestre recebe tudo. Mudar `hidden` de um token que está no combate reenvia o
 combate.
+
+## Status
+
+Buffs e debuffs ficam na tabela `token_statuses` (migration
+`CreateTokenStatuses`), uma linha por token e tipo, com chave
+`(token_id, kind)`: um token nunca tem dois do mesmo tipo. Apagar o token apaga
+os status. Ficam fora da linha do token para um movimento não sobrescrever um
+status aplicado ao mesmo tempo, e `StatusBook` aplica as mudanças em fila.
+
+| Tipo | Status | Valor |
+| --- | --- | --- |
+| Debuff | `bleeding`, `poison`, `burning` | dano por turno, em dados (`1d6`) |
+| Debuff | `slow`, `mind-control`, `blind`, `confused`, `death` | nenhum |
+| Buff | `regeneration` | cura por turno, em dados |
+| Buff | `damage-reduction`, `iron-skin` | dados ou número, só informativo |
+| Buff | `giant`, `invisible`, `haste` | nenhum |
+| Buff | `immune` | `immuneTo`: os debuffs que ele bloqueia |
+
+| Regra | Como funciona |
+| --- | --- |
+| Aplicar de novo | substitui o status do mesmo tipo, com a duração e o valor novos |
+| Duração | `turns` de 1 a 99, ou `null` para durar até o mestre remover |
+| Imunidade | aplicar `immune` tira os debuffs que ela cobre; aplicar um debuff coberto é recusado com `INVALID_STATUS` |
+| Início do turno | quando a vez chega a um token (`combat:start`, `combat:step` com 1 ou `combat:pass`), cada dano ou cura é rolado pelo `RollDiceUseCase` como "Veneno · nome", a duração cai 1 e o status que chega a 0 sai |
+| Vida | o total muda o HP atual da ficha ligada ao token (`AdjustHitPointsUseCase`): o dano pode deixar o HP negativo e a cura para no máximo. Manda `sheet:updated` e `sheet:stats` como uma edição da ficha |
+| Uma vez por rodada | o mesmo token não rola duas vezes na mesma rodada, nem se o mestre voltar e avançar a vez |
+| Autor | as rolagens saem no nome do mestre, mesmo quando um jogador finaliza o turno |
+
+### Morte
+
+`DeathWatch` cuida da queda, do teste de morte e da volta. A morte é o status
+`death`: com `turns` o personagem está caído e `turns` são as tentativas; sem
+`turns` está morto de vez.
+
+| Regra | Como funciona |
+| --- | --- |
+| Queda | quando o HP atual fica abaixo de -(Resistência + Mod de Resistência), cada token ligado à ficha recebe `death`: Agente e NPC caem com 3 tentativas; Ameaça morre na hora (`killed`). Vale para edição da ficha e para dano de status. Imunidade a Morte impede |
+| Teste de morte | no início do turno do token caído, o servidor rola "Teste de morte · nome" (1d20). 15 ou mais tira `death` e devolve 1 de vida; menos gasta uma tentativa; na última falha, `death` fica sem limite |
+| Cura | se o HP volta a ficar positivo, `death` com tentativas sai e os testes param. A morte sem limite só sai pelo mestre |
+| Sem ação | o turno de quem tem `death` passa sozinho depois do teste, uma vez por token a cada sequência. O jogador recebe `CHARACTER_DEAD` ao mover o token, arrastar, editar ou apagar a ficha |
+| Mestre | `status:apply` com `death` derruba (com `turns`, só em Agente e NPC; na Ameaça vira morte sem limite) ou mata (sem `turns`). `status:remove` com `death` e `death:revive` revivem e devolvem 1 de vida a quem estava com 0 ou menos |
+| Aviso | cada mudança manda `death:event` para os mestres e, se o token é visível, para os jogadores, com o nome como "???" quando oculto. O teste traz a rolagem em `message` para o dono jogá-la na própria tela; o evento chega antes da mensagem do chat |
+
+**Quem vê.** O snapshot traz `statuses` e `status:changed` vai para todos, mas
+os jogadores só recebem os status de tokens visíveis. Quando o mestre revela um
+token, os status dele são enviados aos jogadores. As rolagens seguem a regra da
+iniciativa: só para os mestres quando o participante ou o token está oculto, e
+com "???" quando o nome está oculto.
 
 ## Chat e dados
 
