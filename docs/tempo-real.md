@@ -1,302 +1,222 @@
 # Tempo real
 
-Como a mesa conversa ao vivo: conexão, protocolo, permissões e limites. Para a
-apresentação do projeto, volte ao [README](../README.md).
+Conexão, protocolo, permissões e limites do namespace `/table`. Voltar ao
+[README](../README.md).
+
+**Em resumo:** um único gateway Socket.io, autenticado pelo JWT no handshake.
+Todo comando passa por DTO e política, responde no ack com `{ ok, data }` ou
+`{ ok, error }` e só é transmitido para quem pode ver.
+
+---
 
 ## Conexão
 
-O gateway `TableGateway` vive no namespace `/table` do Socket.io, no mesmo
-processo e na mesma porta da API HTTP.
-
 ```ts
-io('https://neuralgrid-api.onrender.com/table', {
-  auth: { token: '<accessToken do login>' },
-});
+io('https://neuralgrid-api.onrender.com/table', { auth: { token: '<accessToken>' } });
 ```
 
-O handshake passa por três barreiras antes de qualquer evento:
+| Barreira | Como |
+| --- | --- |
+| Origem | `AppSocketIoAdapter` recusa `Origin` fora de `CORS_ORIGINS`, inclusive no upgrade para WebSocket |
+| Token | `AuthenticateAccessTokenUseCase` confere assinatura, `iss`, `aud`, `exp` e a conta; falha vira `connect_error` `UNAUTHORIZED` |
+| Expiração | o socket cai no `exp` do JWT, com `session:expired` |
+| Conexões | até 5 por conta; a sexta recebe `session:limit` |
+| Salas | cada socket entra em `user:<id>`; o mestre também em `role:master` |
 
-1. **Origem.** O `AppSocketIoAdapter` recusa conexões cujo cabeçalho `Origin`
-   não esteja em `CORS_ORIGINS`. A opção `cors` do Socket.io só cobre o long
-   polling; a checagem em `allowRequest` cobre também o upgrade para WebSocket.
-2. **Token.** Um middleware do namespace chama
-   `AuthenticateAccessTokenUseCase`: verifica assinatura, algoritmo, `iss`,
-   `aud` e expiração, e confere a conta no banco como no HTTP. Falhou, o cliente
-   recebe `connect_error` com a mensagem `UNAUTHORIZED`.
-3. **Expiração.** Ao conectar, o servidor agenda a queda do socket para o
-   instante do `exp` do JWT e avisa com `session:expired`.
+---
 
-Depois disso, o `JwtAuthGuard` global continua valendo para cada evento: no
-contexto `ws` ele exige o usuário resolvido no handshake e recusa qualquer outro
-tipo de transporte.
+## Eventos do cliente
 
-## Protocolo
+Todos respondem no ack. O cliente envia `token:drag` e `ruler:move` como
+notificação volátil, sem esperar a resposta: se a rede engasga, a prévia some.
 
-### Cliente para servidor
-
-Todos respondem pelo callback de ack com `{ ok: true, data }` ou
-`{ ok: false, error: { code, message } }`, exceto `token:drag`, que é
-fire-and-forget.
-
-| Evento | Quem pode | Payload | Resposta |
-| --- | --- | --- | --- |
-| `token:create` | mestre | `{ label, kind, icon?, sex?, hidden?, nameHidden?, emitsLight?, ownerId?, col, row, size? }` | token criado |
-| `token:update` | mestre | `{ id, label?, kind?, icon?, sex?, hidden?, nameHidden?, emitsLight?, ownerId?, size? }` | token atualizado |
-| `token:move` | mestre ou dono | `{ id, col, row }` | token com `version` nova |
-| `token:drag` | mestre ou dono | `{ id, col, row }` | nenhuma |
-| `token:delete` | mestre | `{ id }` | `{ id }` |
-| `chat:send` | todos | `{ text, visibility, recipientId? }` | mensagem gravada |
-| `dice:roll` | todos | `{ expression, label?, visibility, recipientId? }` | rolagem gravada |
-| `chat:clear` | mestre | nenhum | `{ by, removed }` |
-| `combat:join` | mestre | `{ tokenIds }` | combate |
-| `combat:leave` | mestre | `{ tokenId }` | combate |
-| `combat:update` | mestre | `{ tokenId, initiative?, hidden? }` | combate |
-| `combat:roll` | mestre | `{ tokenIds? }` | combate |
-| `combat:start` | mestre | nenhum | combate |
-| `combat:step` | mestre | `{ step: 1 ou -1, round?, turnId? }` | combate |
-| `combat:pass` | dono do token da vez | `{ tokenId }` | combate na visão de quem pediu |
-| `combat:end` | mestre | nenhum | combate vazio |
-| `status:apply` | mestre | `{ tokenId, kind, turns?, amount?, immuneTo? }` | `{ tokenId, statuses }` |
-| `status:remove` | mestre | `{ tokenId, kind }` | `{ tokenId, statuses }` |
-| `death:revive` | mestre | `{ id }` da ficha | `{ id }` |
-
-### Servidor para cliente
-
-| Evento | Quando | Payload |
+| Grupo | Eventos | Quem pode |
 | --- | --- | --- |
-| `table:snapshot` | logo após conectar ou reconectar | `{ you, tokens, members, online, messages }` |
-| `token:created` | alguém criou um token | token |
-| `token:updated` | alguém moveu ou editou | token |
-| `token:deleted` | o mestre removeu ou escondeu | `{ id }` |
-| `token:dragged` | alguém está arrastando | `{ id, by, col, row }` |
-| `presence:changed` | alguém entrou ou saiu | `{ online: string[] }` |
-| `session:expired` | o JWT venceu | nenhum |
-| `chat:message` | mensagem ou rolagem nova que você pode ver | mensagem |
-| `chat:cleared` | o mestre limpou o chat | `{ by, removed }` |
-| `combat:changed` | o combate mudou | `{ combat }`, na visão de quem recebe |
-| `status:changed` | os status de um token mudaram | `{ tokenId, statuses }` |
-| `death:event` | alguém caiu, rolou o teste de morte, morreu ou voltou | `{ kind, tokenId, label, ownerId, attemptsLeft, failures, roll, success, message }` |
+| Tokens | `token:create`, `token:update`, `token:delete` | mestre |
+| Tokens | `token:move`, `token:drag` | mestre ou dono |
+| Chat | `chat:send`, `dice:roll` | todos |
+| Chat | `chat:clear` | mestre |
+| Desenho | `drawing:create`, `ruler:move`, `ruler:clear` | todos |
+| Desenho | `drawing:erase` | autor ou mestre |
+| Desenho | `drawing:clear` | `{ scope: 'mine' }` todos; `'all'` só o mestre |
+| Fichas | `sheet:create` | todos (jogador até 5, mesa até 200) |
+| Fichas | `sheet:update`, `sheet:delete` | dono ou mestre; tipo, dono e visibilidade só o mestre |
+| Mapas e névoa | `map:*`, `area:*`, `fog:*` | mestre (veja [Mapas](mapas.md)) |
+| Combate | `combat:join`, `leave`, `update`, `roll`, `start`, `step`, `end` | mestre |
+| Combate | `combat:pass` | dono do token da vez |
+| Status | `status:apply`, `status:remove`, `death:revive` | mestre |
 
-`members` traz só `id`, `displayName` e `role`. O nome de login e o hash nunca
-saem do servidor.
+Os payloads estão nos DTOs de `tabletop/presentation/ws/dtos`. Os principais:
 
-### Códigos de erro
+| Evento | Payload |
+| --- | --- |
+| `token:create` | `{ label, kind, icon?, sex?, hidden?, nameHidden?, emitsLight?, ownerId?, col, row, size? }` |
+| `token:move` / `token:drag` | `{ id, col, row }` |
+| `chat:send` | `{ text, visibility, recipientId? }` |
+| `dice:roll` | `{ expression, label?, visibility, recipientId? }` |
+| `combat:step` | `{ step: 1 ou -1, round?, turnId? }` |
+| `combat:pass` | `{ tokenId }` |
+| `status:apply` | `{ tokenId, kind, turns?, amount?, immuneTo? }` |
+
+## Eventos do servidor
+
+| Evento | Quando |
+| --- | --- |
+| `table:snapshot` | ao conectar ou reconectar: você, membros, presença, tokens, mensagens, desenhos, fichas, mapas, cena, névoa, combate e status |
+| `token:created`, `updated`, `deleted`, `dragged` | tokens mudaram ou estão sendo arrastados |
+| `presence:changed` | alguém entrou ou saiu |
+| `chat:message`, `chat:cleared` | mensagem nova que você pode ver; chat limpo |
+| `drawing:created`, `drawing:erased`, `ruler:moved`, `ruler:cleared` | desenhos e régua |
+| `sheet:created`, `updated`, `deleted` | fichas, só para o dono e os mestres |
+| `sheet:stats` | HP e defesa públicos de uma ficha, para todos, quando não estão ocultos |
+| `map:*`, `scene:changed`, `fog:changed`, `fog:memory` | mapas, cena e névoa |
+| `combat:changed` | combate, na visão de quem recebe |
+| `status:changed` | status de um token visível |
+| `death:event` | alguém caiu, testou, morreu ou voltou |
+| `session:expired`, `session:limit` | JWT venceu; conexões demais |
+
+`members` traz só `id`, `displayName` e `role`; login e hash nunca saem.
+
+## Códigos de erro
 
 | Código | Significado |
 | --- | --- |
-| `INVALID_PAYLOAD` | formato errado, tipo errado ou campo que o DTO não declara |
-| `INVALID_TOKEN` | regra de domínio violada: nome vazio, tamanho fora de 1 a 4, posição fora da grade, dono inexistente |
-| `TOKEN_FORBIDDEN` | o papel ou a posse não permitem a ação |
-| `TOKEN_NOT_FOUND` | o token não existe mais |
-| `INVALID_DICE` | expressão de dados fora da gramática ou dos limites |
-| `CHAT_FORBIDDEN` | só o mestre limpa o chat de toda a mesa |
-| `COMBAT_FORBIDDEN` | só o mestre conduz o combate |
-| `INVALID_COMBAT` | iniciativa fora de -99 a 999, mais de 40 participantes, token fora do combate ou combate sem começar |
-| `STATUS_FORBIDDEN` | só o mestre aplica ou remove status |
-| `CHARACTER_DEAD` | o jogador tentou mover o token ou editar a ficha de um personagem caído ou morto |
-| `INVALID_STATUS` | duração fora de 1 a 99, valor num status que não usa valor, imunidade sem efeito, efeito ao qual o token é imune ou status que o token não tem |
-| `INVALID_MESSAGE` | texto vazio ou longo demais, sussurro sem destinatário ou para si mesmo |
+| `INVALID_PAYLOAD` | formato errado ou campo não declarado no DTO |
+| `INVALID_TOKEN` | nome vazio, tamanho fora de 1 a 4, posição fora da grade, dono inexistente |
+| `TOKEN_FORBIDDEN` / `TOKEN_NOT_FOUND` | sem permissão / token não existe (ou está oculto para você) |
+| `INVALID_DICE` | expressão fora da gramática ou dos limites |
+| `INVALID_MESSAGE` | texto vazio ou longo, sussurro sem destinatário ou para si |
+| `CHAT_FORBIDDEN` | só o mestre limpa o chat de todos |
+| `COMBAT_FORBIDDEN` / `INVALID_COMBAT` | só o mestre conduz / iniciativa fora de -99 a 999, mais de 40 participantes, vez que já passou |
+| `STATUS_FORBIDDEN` / `INVALID_STATUS` | só o mestre aplica / duração fora de 1 a 99, valor indevido, efeito bloqueado por imunidade |
+| `CHARACTER_DEAD` | jogador tentou agir com personagem caído ou morto |
 | `RATE_LIMITED` | eventos rápidos demais neste socket |
-| `INTERNAL` | erro inesperado, registrado no log do servidor |
+| `INTERNAL` | erro inesperado, registrado no log |
+
+---
 
 ## Tokens
 
 | Campo | Regra |
 | --- | --- |
-| `kind` | `agent` (Agente), `npc` ou `threat` (Ameaça), na linguagem de Ordem Paranormal |
-| `label` | 1 a 32 caracteres, sem espaços nas pontas |
-| `icon` | um id da lista `TOKEN_ICONS` ou `null` (mostra as iniciais) |
-| `hidden` | `true` deixa o token só para o mestre |
+| `kind` | `agent`, `npc` ou `threat` (Agente, NPC, Ameaça) |
+| `label` | 1 a 32 caracteres |
+| `icon` | id de `TOKEN_ICONS` ou `null` (iniciais) |
 | `sex` | `female`, `male`, `other` ou `null` |
-| `nameHidden` | `true` troca o nome por `???` para os jogadores |
-| `emitsLight` | `true` por padrão; com `false`, o token não acende luz na névoa |
-| `ownerId` | um usuário da mesa ou `null`; se o usuário for removido, vira `null` |
-| `col`, `row` | inteiros entre -500 e 500 |
-| `size` | 1 a 4 células por lado |
-| `version` | começa em 1 e sobe a cada mudança |
+| `hidden` | só o mestre vê |
+| `nameHidden` | jogadores recebem `???` no lugar do nome |
+| `emitsLight` | `true` por padrão; `false` deixa o token no escuro da névoa |
+| `ownerId` | um usuário ou `null`; vira `null` se o usuário for removido |
+| `col`, `row` / `size` | inteiros de -500 a 500 / 1 a 4 células |
+| `version` | começa em 1 e sobe a cada mudança; o último gravado vence |
 
-As mesmas regras existem três vezes, de propósito: no DTO (mensagem amigável),
-na entidade `Token` (invariante do domínio) e em `CHECK` no PostgreSQL (última
-linha de defesa).
+As regras existem três vezes, de propósito: no DTO, na entidade `Token` e em
+`CHECK` no banco.
 
-**Quem move o quê** fica em `TokenPolicy`: o mestre move qualquer token, o
-jogador só os que têm o seu `ownerId`. A mesma regra vale para a prévia de
-arraste, que não grava nada mas também não deixa um jogador mexer, nem
-visualmente, no token de outro.
+**Token oculto** não existe para o jogador: não vem no snapshot, esconder um
+visível envia `token:deleted`, revelar envia o token inteiro, e mover ou
+arrastar responde `TOKEN_NOT_FOUND`, mesmo sendo dono.
 
-**Tokens ocultos.** `TokenPolicy.canSee` decide quem enxerga cada token. O
-mestre vê todos; o jogador, só os que não estão ocultos. A regra vale em todo
-lugar:
-
-| Situação | Mestres | Jogadores |
-| --- | --- | --- |
-| Snapshot | todos os tokens | só os visíveis |
-| Criar oculto | `token:created` | nada |
-| Mover ou editar oculto | `token:updated` | nada |
-| Esconder um visível | `token:updated` | `token:deleted` |
-| Revelar | `token:updated` | `token:updated` com o token inteiro |
-| Remover oculto | `token:deleted` | nada |
-| Arrastar oculto | `token:dragged` | nada |
-
-Para o jogador, um token oculto não existe: mover ou arrastar responde
-`TOKEN_NOT_FOUND`, mesmo que ele seja o dono.
-
-**Nome oculto.** Com `nameHidden`, o token continua visível, mas `viewFor`
-troca o `label` por `???` em tudo que vai para um jogador: snapshot,
-`token:created`, `token:updated` e a resposta do `token:move` que ele mesmo
-fez. O nome real só chega aos mestres.
-
-**Versão.** O servidor é a fonte da verdade e o último movimento gravado vence.
-O campo `version` deixa o cliente descartar uma atualização mais velha que
-chegue fora de ordem e desfazer só o próprio movimento otimista que foi
-recusado.
+---
 
 ## Combate
 
-Um combate por mesa, guardado numa linha da tabela `combat` (migration
-`CreateCombat`): `round`, `turn_token_id` e `combatants` em JSONB, cada um com
-`tokenId`, `initiative` e `hidden`. Só o mestre muda o combate, e cada mudança
-manda `combat:changed` para todos.
+Uma linha na tabela `combat`: `round`, `turn_token_id` e `combatants` em JSONB
+(`tokenId`, `initiative`, `hidden`).
 
-| Regra | Como funciona |
+| Regra | Como |
 | --- | --- |
-| Ordem | iniciativa maior primeiro; empate fica na ordem de entrada; sem valor vai para o fim |
-| Rolar | `combat:roll` sorteia d20 + Mod de Agilidade da ficha ligada ao token pelo `RollDiceUseCase`, e cada rolagem vira uma mensagem "Iniciativa · nome" no chat: pública, ou só para os mestres quando o participante ou o token está oculto. Sem `tokenIds`, rola só quem tem ficha e ainda não tem valor. Token sem ficha recebe o valor digitado |
-| Começar | rodada 1, a vez fica com o primeiro da ordem |
-| Turno | `combat:step` com 1 passa a vez. Com `round` e `turnId`, o servidor recusa (`INVALID_COMBAT`) se a vez já mudou, para dois cliques ao mesmo tempo não pularem ninguém; depois do último, volta ao primeiro e soma uma rodada. Com -1 volta, sem passar da rodada 1 |
-| Finalizar turno | `combat:pass` passa a vez como `combat:step` com 1, mas só aceita o dono de um token visível que está com a vez agora (`COMBAT_FORBIDDEN` para outro token, `INVALID_COMBAT` se a vez já passou) |
-| Sair | se quem sai está com a vez, ela passa para o próximo; sem ninguém, o combate zera |
-| Token removido | sai do combate na hora, pela mesma regra, e `combat:changed` só é enviado se ele estava na luta |
-| Ordem das mudanças | `CombatTracker` aplica uma mudança de cada vez, em fila, para nenhuma se perder quando chegam juntas |
-
-**Quem vê.** Ao entrar, o participante nasce oculto quando o token está oculto
-ou quando a névoa está ligada e o token não tem luz própria. O mestre revela
-com `hidden: false`. O jogador recebe só os participantes visíveis com token
-visível, e `turnId` vira `null` quando a vez é de alguém que ele não vê. O
-mestre recebe tudo. Mudar `hidden` de um token que está no combate reenvia o
-combate.
+| Ordem | maior iniciativa primeiro; empate na ordem de entrada; sem valor no fim |
+| Rolar | d20 + Mod de Agilidade da ficha, publicado no chat como "Iniciativa · nome" (só para mestres se oculto) |
+| Turno | `combat:step` com `round` e `turnId` recusa se a vez já mudou; após o último, volta ao primeiro e soma a rodada |
+| Finalizar turno | `combat:pass`: só o dono do token visível que está com a vez |
+| Saída | quem sai com a vez passa a vez; token removido sai na hora |
+| Fila | `CombatTracker` aplica uma mudança de cada vez |
+| Quem vê | entra oculto se o token está oculto ou sem luz na névoa; o jogador só recebe os visíveis, e `turnId` vira `null` se a vez é de quem ele não vê |
 
 ## Status
 
-Buffs e debuffs ficam na tabela `token_statuses` (migration
-`CreateTokenStatuses`), uma linha por token e tipo, com chave
-`(token_id, kind)`: um token nunca tem dois do mesmo tipo. Apagar o token apaga
-os status. Ficam fora da linha do token para um movimento não sobrescrever um
-status aplicado ao mesmo tempo, e `StatusBook` aplica as mudanças em fila.
+Tabela `token_statuses`, chave `(token_id, kind)`: um status de cada tipo por
+token, aplicados em fila pelo `StatusBook`.
 
-| Tipo | Status | Valor |
+| Grupo | Status | Valor |
 | --- | --- | --- |
-| Debuff | `bleeding`, `poison`, `burning` | dano por turno, em dados (`1d6`) |
+| Debuff | `bleeding`, `poison`, `burning` | dano por turno em dados |
 | Debuff | `slow`, `mind-control`, `blind`, `confused`, `death` | nenhum |
-| Buff | `regeneration` | cura por turno, em dados |
-| Buff | `damage-reduction`, `iron-skin` | dados ou número, só informativo |
+| Buff | `regeneration` | cura por turno em dados |
+| Buff | `damage-reduction`, `iron-skin` | dados ou número, informativo |
 | Buff | `giant`, `invisible`, `haste` | nenhum |
-| Buff | `immune` | `immuneTo`: os debuffs que ele bloqueia |
+| Buff | `immune` | `immuneTo`: os debuffs bloqueados |
 
-| Regra | Como funciona |
+| Regra | Como |
 | --- | --- |
-| Aplicar de novo | substitui o status do mesmo tipo, com a duração e o valor novos |
-| Duração | `turns` de 1 a 99, ou `null` para durar até o mestre remover |
-| Imunidade | aplicar `immune` tira os debuffs que ela cobre; aplicar um debuff coberto é recusado com `INVALID_STATUS` |
-| Início do turno | quando a vez chega a um token (`combat:start`, `combat:step` com 1 ou `combat:pass`), cada dano ou cura é rolado pelo `RollDiceUseCase` como "Veneno · nome", a duração cai 1 e o status que chega a 0 sai |
-| Vida | o total muda o HP atual da ficha ligada ao token (`AdjustHitPointsUseCase`): o dano pode deixar o HP negativo e a cura para no máximo. Manda `sheet:updated` e `sheet:stats` como uma edição da ficha |
-| Uma vez por rodada | o mesmo token não rola duas vezes na mesma rodada, nem se o mestre voltar e avançar a vez |
-| Autor | as rolagens saem no nome do mestre, mesmo quando um jogador finaliza o turno |
+| Aplicar de novo | substitui o do mesmo tipo |
+| Duração | `turns` de 1 a 99, ou `null` até o mestre remover |
+| Início do turno | dano e cura rolados no chat ("Veneno · nome"), duração cai 1, status em 0 sai; uma vez por token por rodada |
+| HP | o total ajusta o HP da ficha ligada: dano pode deixar negativo, cura para no máximo |
 
 ### Morte
 
-`DeathWatch` cuida da queda, do teste de morte e da volta. A morte é o status
-`death`: com `turns` o personagem está caído e `turns` são as tentativas; sem
-`turns` está morto de vez.
+O status `death` com `turns` é queda (as tentativas); sem `turns`, morte de vez.
 
-| Regra | Como funciona |
+| Regra | Como |
 | --- | --- |
-| Queda | quando o HP atual fica abaixo de -(Resistência + Mod de Resistência), cada token ligado à ficha recebe `death`: Agente e NPC caem com 3 tentativas; Ameaça morre na hora (`killed`). Vale para edição da ficha e para dano de status. Imunidade a Morte impede |
-| Teste de morte | no início do turno do token caído, o servidor rola "Teste de morte · nome" (1d20). 15 ou mais tira `death` e devolve 1 de vida; menos gasta uma tentativa; na última falha, `death` fica sem limite |
-| Cura | se o HP volta a ficar positivo, `death` com tentativas sai e os testes param. A morte sem limite só sai pelo mestre |
-| Sem ação | o turno de quem tem `death` passa sozinho depois do teste, uma vez por token a cada sequência. O jogador recebe `CHARACTER_DEAD` ao mover o token, arrastar, editar ou apagar a ficha |
-| Mestre | `status:apply` com `death` derruba (com `turns`, só em Agente e NPC; na Ameaça vira morte sem limite) ou mata (sem `turns`). `status:remove` com `death` e `death:revive` revivem e devolvem 1 de vida a quem estava com 0 ou menos |
-| Aviso | cada mudança manda `death:event` para os mestres e, se o token é visível, para os jogadores, com o nome como "???" quando oculto. O teste traz a rolagem em `message` para o dono jogá-la na própria tela; o evento chega antes da mensagem do chat |
+| Queda | HP abaixo de -(Resistência + Mod): Agente e NPC caem com 3 tentativas; Ameaça morre na hora. Imunidade a Morte impede |
+| Teste | no início do turno, 1d20: 15 ou mais acorda com 1 de vida; menos gasta uma tentativa; a última falha mata |
+| Cura | HP positivo tira a queda; a morte de vez só sai pelo mestre |
+| Sem ação | o turno do caído passa sozinho após o teste; o jogador recebe `CHARACTER_DEAD` |
+| Mestre | `status:apply` com `death` derruba ou mata; `status:remove` ou `death:revive` revivem com 1 de vida |
+| Aviso | `death:event` para os mestres e, se o token é visível, para os jogadores; o teste traz a rolagem para o dono animar |
 
-**Quem vê.** O snapshot traz `statuses` e `status:changed` vai para todos, mas
-os jogadores só recebem os status de tokens visíveis. Quando o mestre revela um
-token, os status dele são enviados aos jogadores. As rolagens seguem a regra da
-iniciativa: só para os mestres quando o participante ou o token está oculto, e
-com "???" quando o nome está oculto.
+---
 
 ## Chat e dados
-
-### Quem vê cada mensagem
 
 | `visibility` | Quem recebe |
 | --- | --- |
 | `public` | toda a mesa |
-| `gm` | o autor e o mestre. Rolada pelo mestre, é a rolagem oculta: só ele vê |
-| `whisper` | o autor e o `recipientId`. O mestre não lê sussurros entre jogadores |
+| `gm` | o autor e o mestre; rolada pelo mestre, só ele vê |
+| `whisper` | o autor e o `recipientId`; o mestre não lê sussurros entre jogadores |
 
-A regra mora em `MessagePolicy.canSee` e é aplicada duas vezes: na consulta do
-histórico, que filtra no SQL, e na entrega ao vivo. Ao conectar, cada socket
-entra na sala `user:<id>`, e o mestre também em `role:master`. Mensagens
-privadas vão só para essas salas, então o payload nunca chega a quem não pode
-lê-lo, nem escondido na rede.
+`MessagePolicy.canSee` vale no SQL do histórico e na entrega ao vivo, que usa só
+as salas de quem pode ler. O snapshot traz as últimas 100 mensagens visíveis.
 
-O snapshot traz as últimas 100 mensagens visíveis para quem conectou.
+### Expressões
 
-O mestre pode apagar o histórico inteiro com `chat:clear`; todos recebem
-`chat:cleared` e esvaziam a tela. Limpar só para si é coisa do cliente: a API
-não guarda nada sobre isso.
-
-### Expressões de dados
-
-A gramática é pequena e fechada, sem `eval`:
+Gramática fechada, sem `eval`, normalizada na volta (`3D20KH + 5` vira
+`3d20kh1+5`):
 
 | Termo | Exemplo | Significado |
 | --- | --- | --- |
-| `NdF` | `2d6` | rola N dados de F faces e soma |
-| `NdFkhK` | `3d20kh1` | mantém os K maiores |
-| `NdFklK` | `2d20kl1` | mantém os K menores |
-| número | `5` | modificador fixo |
-
-Termos se juntam com `+` e `-`, espaços e maiúsculas são ignorados, e a
-expressão volta normalizada (`3D20KH + 5` vira `3d20kh1+5`).
+| `NdF` | `2d6` | rola e soma |
+| `NdFkhK` / `NdFklK` | `3d20kh1` | mantém os K maiores / menores |
+| número | `5` | modificador |
 
 | Limite | Valor |
 | --- | --- |
-| Tamanho da expressão | 64 caracteres |
-| Termos | 12 |
-| Dados por termo | 1 a 50 |
-| Dados por rolagem | 100 |
-| Faces | 2 a 100 |
-| Modificador | até 999 |
+| Expressão | 64 caracteres, 12 termos |
+| Dados | 1 a 50 por termo, 100 por rolagem |
+| Faces / modificador | 2 a 100 / até 999 |
 
-O teste de Ordem Paranormal é só uma expressão: atributo 3 com perícia treinada
-vira `3d20kh1+5`, e atributo 0 vira `2d20kl1`. O frontend monta a expressão; o
-servidor não precisa conhecer o sistema para rolar certo.
+O teste de Ordem Paranormal é só uma expressão: atributo 3 com perícia vira
+`3d20kh1+5`; atributo 0 vira `2d20kl1`. O sorteio usa `crypto.randomInt`, sem
+viés, e grava cada dado, se foi mantido, os subtotais e o total.
 
-### Sorteio
-
-`CryptoRandomSource` usa `crypto.randomInt`, que lê do gerador criptográfico do
-sistema e não tem viés de módulo. O cliente nunca envia resultado, só a
-expressão. A rolagem gravada guarda cada dado, se foi mantido ou descartado, o
-subtotal de cada termo e o total, e é isso que todos recebem.
+---
 
 ## Limites
 
-- **Taxa por socket.** Balde de 30 eventos que recarrega 15 por segundo. A prévia
-  de arraste só é enviada quando o token troca de célula, então um arraste
-  normal fica muito abaixo disso.
-- **Tamanho de mensagem.** 16 kB por pacote (`maxHttpBufferSize`). Texto do
-  chat até 500 caracteres, nome da rolagem até 48.
-- **Heartbeat.** Ping a cada 25 segundos, queda após 20 sem resposta.
-- **Uma instância.** Presença e contadores de taxa ficam em memória. Para mais
-  de uma instância, o Socket.io precisa do adapter de Redis e a presença precisa
-  sair do processo.
+| Limite | Valor |
+| --- | --- |
+| Taxa por socket | balde de 30 eventos, recarga de 15 por segundo |
+| Pacote | 16 kB (`maxHttpBufferSize`) |
+| Texto do chat / nome da rolagem | 500 / 48 caracteres |
+| Heartbeat | ping a cada 25 s, queda após 20 s sem resposta |
+| Instâncias | uma: presença e taxa ficam em memória; mais exige o adapter de Redis |
 
 ## Testes
 
-`test/table.e2e-spec.ts` sobe a API numa porta aleatória e conecta clientes reais
-do `socket.io-client`. Cobre handshake sem token, token forjado e origem
-estranha, snapshot sem credenciais, o ciclo completo de um token com três
-pessoas conectadas, a entrega de chat e rolagens só para quem pode ver, o
-histórico no snapshot, expressões e sussurros inválidos, payloads malformados,
-presença e o limite de taxa.
+`test/table.e2e-spec.ts` conecta clientes `socket.io-client` reais numa porta
+aleatória e cobre handshake inválido, origem estranha, ciclo dos tokens com três
+pessoas, privacidade do chat, rolagens, combate, status, morte, payloads
+malformados, presença e limite de taxa.

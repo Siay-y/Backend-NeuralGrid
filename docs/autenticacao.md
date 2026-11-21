@@ -1,23 +1,25 @@
 # Autenticação e segurança
 
-Como uma credencial vira sessão, o que cada proteção faz e o que ainda falta.
-Para a apresentação do projeto, volte ao [README](../README.md).
+Como uma credencial vira sessão e o que protege cada etapa. Voltar ao
+[README](../README.md).
 
-## Fluxo de login
+**Em resumo:** Argon2id, JWT HS256 conferido contra o banco a cada uso, três
+limites contra força bruta, toda rota fechada por padrão e o mesmo token no
+handshake do socket.
+
+---
+
+## Login
 
 ```text
 POST /api/auth/login { username, password }
-  │
-  ├─ AppThrottlerGuard      default, login-ip e login-account
-  ├─ ValidationPipe         LoginRequestDto: normaliza e valida o formato
-  ├─ LoginUseCase
-  │    └─ VerifyCredentialsUseCase
-  │         ├─ busca o usuário pelo nome normalizado
-  │         └─ verifica o Argon2id (hash fictício se a conta não existe)
+  ├─ AppThrottlerGuard      limites default, login-ip e por conta
+  ├─ ValidationPipe         LoginRequestDto
+  ├─ VerifyCredentials      Argon2id; hash fictício se a conta não existe
   └─ JwtAccessTokenIssuer   assina { sub, username, role } com HS256
 ```
 
-Resposta de sucesso, sempre com `Cache-Control: no-store`:
+Sucesso, sempre com `Cache-Control: no-store`:
 
 ```json
 {
@@ -28,71 +30,56 @@ Resposta de sucesso, sempre com `Cache-Control: no-store`:
 }
 ```
 
-| Situação | Status | Corpo |
-| --- | --- | --- |
-| Credenciais corretas | `200` | sessão acima |
-| Usuário inexistente ou senha errada | `401` | `INVALID_CREDENTIALS`, mesma mensagem nos dois casos |
-| Campo ausente, formato inválido ou campo extra | `400` | lista de mensagens de validação |
-| Limite excedido | `429` | cabeçalho `Retry-After` em segundos |
+| Situação | Status |
+| --- | --- |
+| Credenciais corretas | `200` com a sessão |
+| Usuário inexistente ou senha errada | `401 INVALID_CREDENTIALS`, mesma mensagem e mesmo tempo |
+| Campo ausente, inválido ou extra | `400` com as mensagens de validação |
+| Limite excedido | `429` com `Retry-After` em segundos |
 
 ## Senhas
 
-`Argon2PasswordHasher` usa Argon2id com 19 MiB de memória, 2 iterações e
-paralelismo 1, o mínimo recomendado pela OWASP. O custo de memória torna ataques
-com GPU caros e ainda cabe numa instância de 512 MB do Render.
+| Regra | Valor |
+| --- | --- |
+| Algoritmo | Argon2id, 19 MiB, 2 iterações, paralelismo 1 (mínimo da OWASP) |
+| Tamanho | 12 a 128 caracteres no provisionamento; no login, só o máximo |
+| Origem | o seed gera 24 caracteres aleatórios, grava o hash e mostra a senha uma vez |
 
-A política de senha (12 a 128 caracteres) vale no provisionamento. O login só
-limita o tamanho máximo, para um corpo gigante não virar trabalho de hash.
+---
 
-## Proteção contra força bruta
+## Força bruta
 
-Dois limites protegem o login:
+| Limite | Regra | Bloqueio |
+| --- | --- | --- |
+| `default` | 120 requisições por minuto por IP, todas as rotas | 1 minuto |
+| `login-ip` | 10 tentativas em 10 minutos por IP | 15 minutos |
+| Por conta | 5 erros na mesma conta em 15 minutos | só os IPs que erraram, por 15 minutos |
 
-| Limite | Onde | Regra | Bloqueio |
-| --- | --- | --- | --- |
-| `default` | `throttler.options.ts`, todas as rotas | 120 por minuto por IP | 1 minuto |
-| `login-ip` | `throttler.options.ts`, rotas com `@BruteForceProtected()` | 10 tentativas em 10 minutos por IP | 15 minutos |
-| Por conta | `login-attempt-limiter.ts`, no `AuthController` | 5 erros na conta em 15 minutos | só os IPs que erraram |
+- Só senha errada conta; um login certo zera os erros daquele IP.
+- Um IP sem erros continua entrando: ninguém tranca o mestre para fora
+  sabendo só o nome de usuário.
+- `req.ip` depende de `TRUST_PROXY_HOPS` certo (`1` no Render). Com `0`, todos
+  parecem vir do balanceador; com valor maior, o cliente forja o IP.
+- Os contadores ficam em memória: basta com uma instância; com várias, precisam
+  ir para o Redis.
 
-O limite por IP para um atacante numa única máquina. O limite por conta para o
-ataque distribuído e segue três regras:
-
-- Só erro de senha conta. Login certo nunca soma, então abrir várias abas não
-  bloqueia ninguém, e um login certo apaga os erros daquele IP.
-- Quando a conta junta 5 erros em 15 minutos, cada IP que errou nela fica
-  bloqueado até 15 minutos depois do próprio último erro.
-- Um IP sem erros continua entrando. Quem souber o nome de usuário do mestre
-  não consegue mais trancá-lo para fora, e um ataque distribuído fica com um
-  palpite por IP.
-
-`req.ip` só é confiável com `TRUST_PROXY_HOPS` certo. Com `0` atrás do Render,
-todos os jogadores pareceriam vir do mesmo IP do balanceador. Com um número
-maior que o real, um cliente poderia forjar o próprio IP pelo cabeçalho
-`X-Forwarded-For` e escapar do limite.
-
-Os contadores ficam em memória. Com uma instância só, como no plano atual,
-isso basta. Ao escalar horizontalmente, o storage do Throttler precisa ir para
-o Redis.
+---
 
 ## JWT
 
-- Algoritmo fixo em `HS256` na emissão e na validação, o que fecha a porta para
-  ataques de troca de algoritmo e para tokens `alg: none`.
-- `iss` e `aud` são emitidos e exigidos, então um token assinado com o mesmo
-  segredo para outro propósito não passa.
-- `JwtStrategy.validate` confere o formato das claims e chama
-  `ResolveSessionUserUseCase`, que busca a conta no banco. Conta removida, nome
-  diferente ou papel diferente invalidam o token na hora.
-- Não há refresh token nesta etapa. Quando o token expira, o frontend volta para
-  o login e avisa que a sessão expirou.
+| Regra | Efeito |
+| --- | --- |
+| `HS256` fixo na emissão e na validação | fecha a troca de algoritmo e o `alg: none` |
+| `iss` e `aud` exigidos | token do mesmo segredo para outro uso não passa |
+| Conta conferida no banco a cada uso | conta removida ou papel alterado invalidam o token na hora |
+| Sem refresh token | ao expirar, o jogador entra de novo |
 
-Trocar o `JWT_SECRET` derruba todas as sessões de uma vez. Use isso como botão
-de emergência se suspeitar de vazamento.
+Trocar o `JWT_SECRET` derruba todas as sessões: é o botão de emergência.
 
 ## Autorização
 
-`JwtAuthGuard` é global e fail-closed: rota sem `@Public()` exige token.
-`RolesGuard` lê `@Roles()` e responde `403` quando o papel não bate.
+`JwtAuthGuard` global e fail-closed: rota sem `@Public()` exige token.
+`RolesGuard` responde `403` quando o papel não bate com `@Roles()`.
 
 ```ts
 @Roles('master')
@@ -100,45 +87,33 @@ de emergência se suspeitar de vazamento.
 createMap(@CurrentUser() user: AuthenticatedUser) { ... }
 ```
 
-## Cabeçalhos e transporte
+## HTTP
 
-`configureHttp` aplica:
+| Proteção | Configuração |
+| --- | --- |
+| Helmet | HSTS, `nosniff`, `frame-ancestors`, CSP restritiva, sem `X-Powered-By` |
+| CORS | só `CORS_ORIGINS`, sem cookies, expõe apenas `Retry-After` |
+| Corpo | JSON até 64 kB |
+| `ValidationPipe` | `whitelist` e `forbidNonWhitelisted`: campo não declarado é erro |
 
-- **Helmet** com os padrões: HSTS, `nosniff`, `frame-ancestors`, CSP restritiva
-  e remoção do `X-Powered-By`.
-- **CORS** só para as origens de `CORS_ORIGINS`, sem cookies
-  (`credentials: false`), expondo apenas `Retry-After`.
-- **Limite de corpo** de 64 kB para JSON.
-- **ValidationPipe** com `whitelist` e `forbidNonWhitelisted`: um campo que o DTO
-  não declara é erro, não é ignorado em silêncio.
+---
 
-## WebSockets
+## WebSocket
 
-O Socket.io usa o mesmo JWT, validado uma vez no handshake:
+| Regra | Como |
+| --- | --- |
+| Handshake | `AuthenticateAccessTokenUseCase` confere assinatura, `iss`, `aud`, `exp` e a conta no banco |
+| Usuário | fica em `socket.data.user`; `RolesGuard` e `@CurrentUser()` funcionam igual ao HTTP |
+| Expiração | o socket cai no instante do `exp`, com `session:expired` |
+| Conexões | até 5 por conta (`MAX_CONNECTIONS_PER_USER`); a sexta recebe `session:limit` |
+| Taxa | limite próprio por socket; o throttler HTTP não atua aqui |
 
-- `AuthenticateAccessTokenUseCase` junta o `AccessTokenVerifier` (assinatura,
-  algoritmo, `iss`, `aud` e `exp`) com o `ResolveSessionUserUseCase` (conta e
-  papel ainda batem com o banco). É o único caso de uso que o `AuthModule`
-  exporta para outros módulos.
-- O usuário resolvido fica em `socket.data.user`. `getRequestUser` lê dali no
-  contexto `ws`, então `RolesGuard` e `@CurrentUser()` funcionam sem alteração.
-- Os guards globais também rodam nos eventos de socket. O `JwtAuthGuard` exige o
-  usuário do handshake no contexto `ws` e recusa qualquer outro tipo de
-  transporte; o `AppThrottlerGuard` só atua em HTTP, e o socket tem um limite de
-  taxa próprio.
-- O socket é derrubado no instante em que o token expira.
-- Cada conta abre no máximo 5 conexões ao mesmo tempo
-  (`MAX_CONNECTIONS_PER_USER`). A sexta recebe `session:limit` e é derrubada,
-  o que impede uma conta, ou um token vazado, de esgotar a memória do servidor
-  abrindo centenas de conexões.
-
-Os detalhes do protocolo estão em [Tempo real](tempo-real.md).
+Protocolo completo em [Tempo real](tempo-real.md).
 
 ## O que ainda falta
 
-- Refresh token com rotação, para sessões mais longas que `JWT_EXPIRES_IN`.
-- Derrubar na hora o socket de uma conta removida ou com papel alterado. Hoje
-  isso acontece no próximo handshake ou na expiração do token.
-- Storage do Throttler e adapter do Socket.io no Redis, se a API passar de uma
-  instância.
-- Registro de auditoria dos logins, com IP e resultado.
+- Refresh token com rotação.
+- Derrubar na hora o socket de conta removida ou com papel alterado (hoje só no
+  próximo handshake ou no `exp`).
+- Throttler e adapter do Socket.io no Redis, se houver mais de uma instância.
+- Auditoria dos logins, com IP e resultado.

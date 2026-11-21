@@ -1,43 +1,36 @@
 # Deploy
 
-Banco no Neon ou no Supabase, API num Web Service do Render. Para a
-apresentação do projeto, volte ao [README](../README.md).
+Banco no Neon ou no Supabase, API num Web Service do Render. Voltar ao
+[README](../README.md).
 
-## 1. Banco de dados
+**Em resumo:** crie o banco, configure o Render com as variáveis abaixo, rode o
+seed da sua máquina e confira `/api/health/db`. As migrations rodam sozinhas no
+boot.
 
-### Neon
+---
 
-1. Crie um projeto e um banco, por exemplo `neuralgrid`.
-2. Em **Connection Details**, copie a connection string do branch principal.
-3. Use `DATABASE_SSL_MODE=verify`. O certificado do Neon é emitido por uma CA
-   pública e a validação completa funciona sem configuração extra.
+## 1. Banco
 
-### Supabase
+| Provedor | Connection string | `DATABASE_SSL_MODE` |
+| --- | --- | --- |
+| Neon | **Connection Details** do branch principal | `verify` (CA pública) |
+| Supabase | **Session pooler**, porta 5432 | `require` (CA própria) |
 
-1. Crie um projeto e anote a senha do banco.
-2. Em **Connect**, copie a URL do **Session pooler** (porta 5432). O Transaction
-   pooler (porta 6543) não preserva sessão entre comandos e quebra as migrations.
-3. Use `DATABASE_SSL_MODE=require`. O certificado do Supabase é assinado por uma
-   CA própria, então a conexão é cifrada sem validar a cadeia.
+No Supabase, o Transaction pooler (porta 6543) não mantém sessão e quebra as
+migrations.
 
-Nos dois casos, a API cria as tabelas sozinha no primeiro boot, aplicando as
-migrations pendentes.
-
-## 2. Web Service no Render
+## 2. Render
 
 | Configuração | Valor |
 | --- | --- |
-| Runtime | Node |
-| Branch | `main` |
+| Runtime / Branch | Node / `main` |
 | Build Command | `npm ci --include=dev && npm run build` |
 | Start Command | `npm run start:prod` |
 | Health Check Path | `/api/health` |
 | Auto-Deploy | ligado |
 
-O `--include=dev` é obrigatório: com `NODE_ENV=production`, o `npm ci` pula as
-devDependencies, e o build precisa do `@nestjs/cli` e do `typescript`.
-
-Variáveis de ambiente:
+O `--include=dev` é obrigatório: com `NODE_ENV=production` o `npm ci` pula o
+`@nestjs/cli` e o `typescript`, que o build usa.
 
 | Variável | Valor |
 | --- | --- |
@@ -46,16 +39,16 @@ Variáveis de ambiente:
 | `DATABASE_URL` | connection string do passo 1 |
 | `DATABASE_SSL_MODE` | `verify` (Neon) ou `require` (Supabase) |
 | `JWT_SECRET` | 48 bytes aleatórios em base64url |
-| `JWT_EXPIRES_IN` | `8h`, ou o tamanho de uma sessão de jogo |
+| `JWT_EXPIRES_IN` | `8h`, ou a duração de uma sessão de jogo |
 | `CORS_ORIGINS` | `https://<projeto>.web.app,https://<projeto>.firebaseapp.com` |
 | `TRUST_PROXY_HOPS` | `1` |
 
-Não defina `PORT`: o Render injeta a porta e a API a respeita.
+Não defina `PORT`: o Render injeta a dele. WebSockets funcionam sem
+configuração extra.
 
-## 3. Contas da mesa
+## 3. Contas
 
-O seed roda da sua máquina, apontando para o banco de produção. Não é preciso
-shell no Render, que no plano gratuito nem existe.
+O seed roda da sua máquina, apontando para o banco de produção:
 
 ```bash
 DATABASE_URL="<url de produção>" \
@@ -64,11 +57,8 @@ SEED_USERS="mestre:Mestre:master,ana:Ana:player,bruno:Bruno:player,caio:Caio:pla
 npm run seed
 ```
 
-Guarde a tabela impressa só até entregar as senhas. Para trocar todas depois:
-
-```bash
-npm run seed:reset
-```
+Entregue cada senha por um canal privado. `npm run seed:reset` gera senhas
+novas para todos.
 
 ## 4. Conferência
 
@@ -76,23 +66,27 @@ npm run seed:reset
 curl https://<servico>.onrender.com/api/health/db
 ```
 
-A resposta esperada é `{"status":"ok","database":"up"}`. O `/api/health`, usado
-pelo Render, só confirma que a API está de pé e não consulta o banco, para o
-Neon poder dormir quando ninguém está jogando. O `/api/health/db` consulta o
-banco e aceita 30 chamadas por minuto por IP. Em seguida, aponte o
-`apiUrl` de `src/environments/environment.ts` do frontend e o `connect-src` do
-`firebase.json` para a mesma URL.
+| Rota | O que confere |
+| --- | --- |
+| `/api/health` | só a API, sem tocar no banco, para o Neon poder dormir |
+| `/api/health/db` | API e banco: `{"status":"ok","database":"up"}`, até 30 chamadas por minuto por IP |
+
+Depois aponte o `environment.ts` e o `connect-src` do `firebase.json` do
+frontend para a mesma URL. Com migration nova, publique a API antes do
+frontend.
+
+---
 
 ## Rotação de segredos
 
 | Segredo | Como trocar | Efeito |
 | --- | --- | --- |
-| `JWT_SECRET` | novo valor no Render e redeploy | todas as sessões caem, cada jogador entra de novo |
-| Senha de uma conta | `npm run seed:reset` | todas as senhas de `SEED_USERS` mudam |
-| Senha do banco | painel do provedor e nova `DATABASE_URL` no Render | nenhum, após o redeploy |
+| `JWT_SECRET` | valor novo no Render e redeploy | todas as sessões caem |
+| Senhas das contas | `npm run seed:reset` | todas as senhas de `SEED_USERS` mudam |
+| Senha do banco | painel do provedor e nova `DATABASE_URL` | nenhum, após o redeploy |
 
 ## Plano gratuito
 
-O Web Service gratuito hiberna depois de 15 minutos sem tráfego e leva até um
-minuto para acordar. Para uma sessão marcada, abra o site alguns minutos antes.
-O frontend avisa quando o login está esperando o servidor acordar.
+O serviço hiberna após 15 minutos sem tráfego e leva até um minuto para
+acordar. Abra o site alguns minutos antes da sessão; o frontend avisa no login
+e, com a mesa aberta, chama `/api/health` a cada 10 minutos.
